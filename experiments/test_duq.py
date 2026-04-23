@@ -1,3 +1,5 @@
+"""Evaluate saved DUQ checkpoints and summarize their predictions."""
+
 import argparse
 import os
 import sys
@@ -8,8 +10,10 @@ import torch
 import torch.nn.functional as nnf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from training.utils import coro_timer, mkdirp, summarize_csv, get_outputsaver
-from training.engine import coro_log_metrics, do_epoch, check_cuda, deteministic_run
+from training.coroutines import coro_timer
+from training.logging import coro_log_metrics
+from training.utils import check_cuda, deterministic_run, get_outputsaver, mkdirp, summarize_csv
+from training.engine import do_epoch
 from training.calibration import bins2diagram
 from models import STANDARDMODELS
 from models.uncertainty.duq import DUQModel
@@ -87,7 +91,7 @@ if __name__ == "__main__":
     print(args, end="\n\n")
 
     if args.seed is not None:
-        deteministic_run(seed=args.seed)
+        deterministic_run(seed=args.seed)
 
     device = torch.device(args.device)
     if device != torch.device("cpu"):

@@ -1,3 +1,5 @@
+"""Train a DUQ model and evaluate it during training."""
+
 import argparse
 import os
 import sys
@@ -7,11 +9,13 @@ import torch
 import torch.nn.functional as nnf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from training.utils import coro_timer, mkdirp
+from training.coroutines import coro_timer
+from training.logging import coro_log_timed
+from training.utils import check_cuda, deterministic_run, mkdirp
 from models.uncertainty.duq import DUQModel, FeatureExtractor, calc_gradient_penalty
 from models import STANDARDMODELS
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, NTRAIN, OUTCLASS, INSIZE
-from training.engine import coro_log_timed, do_epoch, SummaryWriter, check_cuda, deteministic_run
+from training.engine import SummaryWriter, do_epoch
 
 
 def get_args():
@@ -145,7 +149,7 @@ if __name__ == "__main__":
     print(args, end="\n\n")
 
     if args.seed is not None:
-        deteministic_run(seed=args.seed)
+        deterministic_run(seed=args.seed)
 
     device = torch.device(args.device)
     if device != torch.device("cpu"):

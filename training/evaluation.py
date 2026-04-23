@@ -1,3 +1,5 @@
+"""Evaluation helpers for in-domain and out-of-domain uncertainty workflows."""
+
 from os.path import join as pjoin
 import numpy as np
 import torch
@@ -5,8 +7,9 @@ import torch.nn.functional as nnf
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from .engine import cumentropy, avgdups
-from .utils import coro_trackavg_weighted, coro_dict2csv, coro_npybatchgatherer, autoinitcoroutine
+from .coroutines import autoinitcoroutine, coro_dict2csv, coro_npybatchgatherer, coro_trackavg_weighted
+from .engine import avgdups
+from .metrics import cumentropy
 
 
 def confidence_from_prediction_npy(npyfile: str) -> np.ndarray:

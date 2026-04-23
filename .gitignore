@@ -1,1 +1,6 @@
 .gitnexus
+.vscode
+.claude
+package-lock.json
+AGENTS.md
+CLAUDE.md

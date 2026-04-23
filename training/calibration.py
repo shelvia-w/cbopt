@@ -72,6 +72,7 @@ def joinbins(*binses):
         [sum(cs) for cs in zip(*cumconfs)],
     )
 
+
 def bins2diagram(
     bins: BINSTYPE, displays: bool = False, saveas: Optional[str] = None) -> None:
     """Plot and optionally save a reliability diagram from binned predictions."""

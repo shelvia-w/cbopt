@@ -1,3 +1,5 @@
+"""Train an SNGP model with periodic evaluation and checkpointing."""
+
 import argparse
 import math
 import os
@@ -8,13 +10,13 @@ import torch
 import torch.nn.functional as nnf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from training.utils import coro_timer, mkdirp, savecheckpoint
+from training.checkpoint import savecheckpoint
+from training.coroutines import coro_timer
+from training.logging import coro_log_timed
+from training.utils import check_cuda, deterministic_run, mkdirp
 from models import SNGPMODELS
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, NTRAIN, OUTCLASS, INSIZE
-from training.engine import (
-    coro_log_timed, do_epoch, do_evalbatch,
-    SummaryWriter, check_cuda, deteministic_run,
-)
+from training.engine import SummaryWriter, do_epoch, do_evalbatch
 
 
 def get_args():
@@ -116,7 +118,7 @@ if __name__ == "__main__":
     print(args, end="\n\n")
 
     if args.seed is not None:
-        deteministic_run(seed=args.seed)
+        deterministic_run(seed=args.seed)
 
     device = torch.device(args.device)
     if device != torch.device("cpu"):

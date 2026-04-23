@@ -1,3 +1,5 @@
+"""Dataset loaders, metadata, and data-specific helper utilities."""
+
 from .dataloaders import (
     TRAINDATALOADERS,
     TESTDATALOADER,
@@ -6,10 +8,12 @@ from .dataloaders import (
     OUTCLASS,
     INSIZE,
 )
+from .data_utils import corrupt_labels
 from .ood_utils import OODMetrics, auroc, get_svhn_loader, get_flowers102_loader
 
 __all__ = [
     "TRAINDATALOADERS", "TESTDATALOADER",
     "NTRAIN", "NTEST", "OUTCLASS", "INSIZE",
+    "corrupt_labels",
     "OODMetrics", "auroc", "get_svhn_loader", "get_flowers102_loader",
 ]

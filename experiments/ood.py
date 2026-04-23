@@ -1,3 +1,5 @@
+"""Run out-of-domain evaluation across saved uncertainty model checkpoints."""
+
 import argparse
 import os
 import sys
@@ -14,8 +16,10 @@ from methods.baselines.vogn import VOGN
 from models.uncertainty.swag import SWAG
 from models.uncertainty.duq import DUQModel
 from models.uncertainty.sngp import SNGPModel
-from training.utils import coro_timer, mkdirp, coro_dict2csv, loadcheckpoint
-from training.engine import do_epoch, check_cuda, deteministic_run
+from training.checkpoint import loadcheckpoint
+from training.coroutines import coro_dict2csv, coro_timer
+from training.utils import check_cuda, deterministic_run, mkdirp
+from training.engine import do_epoch
 from training.evaluation import (
     do_evalbatch_ood, do_evalbatch_von, do_evalbatch_swag,
     do_evalbatch_duq, do_evalbatch_sngp,
@@ -143,7 +147,7 @@ if __name__ == "__main__":
     print(args, end="\n\n")
 
     if args.seed is not None:
-        deteministic_run(seed=args.seed)
+        deterministic_run(seed=args.seed)
 
     device = torch.device(args.device)
     if device != torch.device("cpu"):
