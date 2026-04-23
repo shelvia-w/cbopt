@@ -1,0 +1,46 @@
+# UCBOpt optimizer configuration
+# Train: qsub -v CONFIG=configs/ucbopt.yaml pbs/train.pbs
+# Test:  qsub -v CONFIG=configs/ucbopt.yaml pbs/test.pbs
+# OOD:   qsub -v CONFIG=configs/ucbopt.yaml pbs/ood.pbs
+
+optimizer: ucbopt
+dataset: cifar10
+model: resnet20
+seeds: [0, 1, 2, 3, 4]
+device: cuda
+
+# Result directory relative to /scratch/$USER/cbo_results/
+# Must match the values in train_args below.
+traindir: "ucbopt/cifar10_resnet20/lr_3.7_wd_2e-4_h0_0.5_curv_0.0_tf_0.2_nr_0.2"
+
+# --- Training arguments ---
+# Keys with 1-2 chars use a single dash (-lr), longer keys use double dash (--beta1).
+train_args:
+  lr: "3.7"
+  e: "200"
+  warmup: "5"
+  weight-decay: "2e-4"
+  beta1: "0.9"
+  beta2: "0.99999"
+  hess_init: "0.5"
+  cand_curvature: "0.0"
+  tbatch: "50"
+  vbatch: "50"
+  tvsplit: "1.0"
+  j: "0"
+  tf: "0.2"
+  nr: "0.2"
+train_flags:
+  - rescale_lr
+
+# --- Evaluation arguments ---
+seed_start: 0
+seed_end: 4
+eval_subdir: "eval"
+test_flags:
+  - pd
+
+# --- OOD evaluation ---
+ood_dataset: svhn
+ood_testsamples: 1
+ood_testrepeat: 64

@@ -1,0 +1,48 @@
+# UCBOpt + MC Dropout configuration
+# Train: qsub -v CONFIG=configs/ucbopt_mcdrop.yaml pbs/train.pbs
+# Test:  qsub -v CONFIG=configs/ucbopt_mcdrop.yaml pbs/test.pbs
+# OOD:   qsub -v CONFIG=configs/ucbopt_mcdrop.yaml pbs/ood.pbs
+#
+# NOTE: train_ucbopt_mcdrop.py uses --wd (not --weight-decay) and short flags
+# -tb/-vb/-sp. Keys starting with '--' bypass the auto-dash rule in run_train.sh.
+
+optimizer: ucbopt_mcdrop
+dataset: cifar10
+model: resnet20_mcdrop
+seeds: [0, 1, 2, 3, 4]
+device: cuda
+
+traindir: "ucbopt_mcdrop/cifar10_resnet20_mcdrop/lr_3.5_wd_2e-4_h0_0.5_curv_1e-5_tf_0.1"
+
+# --- Training arguments ---
+train_args:
+  lr: "3.5"
+  lr_final: "0.0"
+  warmup: "5"
+  e: "200"
+  "--wd": "2e-4"    # train_ucbopt_mcdrop.py uses --wd, not --weight-decay
+  beta1: "0.9"
+  beta2: "0.99999"
+  hess_init: "0.5"
+  cand_curvature: "1e-5"
+  tb: "50"          # -tb (train_ucbopt_mcdrop.py uses short flags)
+  vb: "50"
+  sp: "1.0"
+  j: "0"
+  tf: "0.1"
+train_flags:
+  - rescale_lr
+
+# --- Evaluation arguments ---
+seed_start: 0
+seed_end: 4
+eval_subdir: "eval_bayes"
+test_args:
+  tr: "64"
+test_flags:
+  - pd
+
+# --- OOD evaluation ---
+ood_dataset: svhn
+ood_testsamples: 1
+ood_testrepeat: 64

@@ -1,0 +1,50 @@
+# IVON optimizer configuration (Improved Variational Online Newton, price approximation)
+# Train: qsub -v CONFIG=configs/ivon.yaml pbs/train.pbs
+# Test:  qsub -v CONFIG=configs/ivon.yaml pbs/test.pbs
+# OOD:   qsub -v CONFIG=configs/ivon.yaml pbs/ood.pbs
+#
+# For Bayesian (ensemble) evaluation set eval_subdir: "eval_bayes" and test_args.tr > 0.
+
+optimizer: ivon
+dataset: cifar10
+model: resnet20
+seeds: [0, 1, 2, 3, 4]
+device: cuda
+
+# Result directory relative to /scratch/$USER/cbo_results/
+traindir: "ivon_price/cifar10_resnet20/lr_3.5_wd_2e-4_h0_0.5_ess_50000_tf_0.2_nr_0.4"
+
+# --- Training arguments ---
+train_args:
+  lr: "3.5"
+  e: "200"
+  weight-decay: "2e-4"
+  beta1: "0.9"
+  beta2: "0.99999"
+  hess_init: "0.5"
+  hess_approx: "price"
+  ess: "50000"
+  tbatch: "50"
+  vbatch: "50"
+  tvsplit: "1.0"
+  j: "0"
+  tf: "0.2"
+  nr: "0.4"
+train_flags:
+  - rescale_lr
+
+# --- Evaluation arguments ---
+# Use tr: "0" for deterministic (MAP) prediction.
+# Use tr: "N" (N > 0) for Bayesian averaging over N samples; set eval_subdir: "eval_bayes".
+seed_start: 0
+seed_end: 4
+eval_subdir: "eval"
+test_args:
+  tr: "0"
+test_flags:
+  - pd
+
+# --- OOD evaluation ---
+ood_dataset: svhn
+ood_testsamples: 1
+ood_testrepeat: 64

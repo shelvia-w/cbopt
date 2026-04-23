@@ -1,0 +1,40 @@
+# SNGP (Spectral-normalized Neural GP) configuration
+# Train: qsub -v CONFIG=configs/sngp.yaml pbs/train.pbs
+# Test:  qsub -v CONFIG=configs/sngp.yaml pbs/test.pbs
+#
+# NOTE: train_sngp.py uses short flags -tb/-vb/-sp instead of --tbatch/--vbatch/--tvsplit.
+
+optimizer: sngp
+dataset: cifar10
+model: resnet20_sngp
+seeds: [0, 1, 2, 3, 4]
+device: cuda
+
+traindir: "sngp/cifar10_resnet20/lr_5e-2_wd_2e-4_with_specnorm"
+
+# --- Training arguments ---
+train_args:
+  lr: "5e-2"
+  e: "200"
+  weight-decay: "2e-4"
+  tb: "50"          # -tb (train batch); train_sngp.py uses short flags
+  vb: "50"          # -vb (val batch)
+  sp: "1.0"         # -sp (train/val split)
+  spec_norm_bound: "0.95"
+  gp_hidden_dim: "1024"
+  gp_scale: "2.0"
+  j: "0"
+train_flags:
+  - use_spec_norm
+
+# --- Evaluation arguments ---
+seed_start: 0
+seed_end: 4
+eval_subdir: "eval"
+test_flags:
+  - pd
+
+# --- OOD evaluation ---
+ood_dataset: svhn
+ood_testsamples: 1
+ood_testrepeat: 1

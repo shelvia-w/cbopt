@@ -1,0 +1,40 @@
+# AdaHessian optimizer configuration
+# Train: qsub -v CONFIG=configs/adahessian.yaml pbs/train.pbs
+# Test:  qsub -v CONFIG=configs/adahessian.yaml pbs/test.pbs
+#
+# No PBS reference exists for adahessian — verify train_adahessian.py's CLI
+# argument names match the keys below before submitting.
+
+optimizer: adahessian
+dataset: cifar10
+model: resnet20
+seeds: [0, 1, 2, 3, 4]
+device: cuda
+
+traindir: "adahessian/cifar10_resnet20/lr_1e-1_wd_1e-4_tf_0.2_nr_0.2"
+
+# --- Training arguments ---
+# Typical AdaHessian defaults — adjust to match train_adahessian.py.
+train_args:
+  lr: "1e-1"
+  e: "200"
+  weight-decay: "1e-4"
+  tbatch: "50"
+  vbatch: "50"
+  tvsplit: "1.0"
+  j: "0"
+  tf: "0.2"
+  nr: "0.2"
+train_flags: []
+
+# --- Evaluation arguments ---
+seed_start: 0
+seed_end: 4
+eval_subdir: "eval"
+test_flags:
+  - pd
+
+# --- OOD evaluation ---
+ood_dataset: svhn
+ood_testsamples: 1
+ood_testrepeat: 1

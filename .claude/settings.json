@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(pbs|sh|yaml|yml\\)$\")",
+      "Bash(/s/Coding/anaconda3/Scripts/conda.exe run -n cbo python -c ' *)",
+      "Bash(/s/Coding/anaconda3/Scripts/conda.exe env *)",
+      "Read(//s/Coding/**)",
+      "Read(//s/Coding//**)"
+    ],
+    "additionalDirectories": [
+      "s:\\NTU Projects\\CBO"
+    ]
+  }
+}
