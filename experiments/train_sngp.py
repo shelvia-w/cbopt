@@ -1,4 +1,4 @@
-"""Train an SNGP model with periodic evaluation and checkpointing."""
+﻿"""Train an SNGP model with periodic evaluation and checkpointing."""
 
 import argparse
 import math
@@ -10,13 +10,13 @@ import torch
 import torch.nn.functional as nnf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from training.checkpoint import savecheckpoint
-from training.coroutines import coro_timer
-from training.logging import coro_log_timed
-from training.utils import check_cuda, deterministic_run, mkdirp
+from core.checkpoint import savecheckpoint
+from core.coroutines import coro_timer
+from core.logging import coro_log_timed
+from core.utils import check_cuda, deterministic_run, mkdirp
 from models import SNGPMODELS
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, NTRAIN, OUTCLASS, INSIZE
-from training.engine import SummaryWriter, do_epoch, do_evalbatch
+from core.engine import SummaryWriter, do_epoch, do_evalbatch
 
 
 def get_args():
@@ -211,3 +211,4 @@ if __name__ == "__main__":
 
     log_ece.close()
     print(f">>> Training completed at {next(timer)[0].isoformat()} <<<\n")
+

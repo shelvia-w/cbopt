@@ -1,4 +1,4 @@
-"""CIFAR-10-C and CIFAR-100-C datasets: https://arxiv.org/abs/1903.12261"""
+﻿"""CIFAR-10-C and CIFAR-100-C datasets: https://arxiv.org/abs/1903.12261"""
 from typing import Optional, Union, List, Iterable, Dict
 from os import listdir, rename, rmdir
 from os.path import join as pjoin, exists as pexists
@@ -12,7 +12,7 @@ from torch.utils.data.sampler import BatchSampler, SequentialSampler
 from torchvision.datasets import VisionDataset
 from torchvision.datasets.utils import download_and_extract_archive
 import torchvision.transforms as transforms
-from training.utils import mkdirp
+from core.utils import mkdirp
 
 
 CORRUPTIONS = OrderedDict(
@@ -459,3 +459,4 @@ def get_cifar10c_loader(
     )
 
     return loader
+

@@ -1,3 +1,5 @@
+"""Dataset loader factories and dataset metadata for training and evaluation."""
+
 from typing import Tuple
 from os.path import join as pjoin
 import random
@@ -310,6 +312,250 @@ def get_cifar100_test_loader(
         )
     )
 
+    return test_loader
+
+
+class MNISTInfo:
+    outclass = 10
+    imgshape = (1, 28, 28)
+    counts = {"train": 60000, "test": 10000}
+    mean = (0.1307,)
+    std = (0.3081,)
+
+
+def get_mnist_train_loaders(
+    data_dir: str,
+    train_val_split: float,
+    workers: int,
+    pin_memory: bool,
+    tbatch: int,
+    vbatch: int,
+    tdups: int = 1,
+    vdups: int = 1,
+) -> Tuple[DataLoader, DataLoader]:
+    mnist_dir = pjoin(data_dir, "mnist")
+    normalize = transforms.Normalize(MNISTInfo.mean, MNISTInfo.std)
+
+    train_data = datasets.MNIST(
+        root=mnist_dir,
+        train=True,
+        transform=transforms.Compose([transforms.ToTensor(), normalize]),
+        download=True,
+    )
+    val_data = datasets.MNIST(
+        root=mnist_dir,
+        train=True,
+        transform=transforms.Compose([transforms.ToTensor(), normalize]),
+        download=True,
+    )
+
+    nb_train = int(len(train_data) * train_val_split)
+    train_indices = list(range(nb_train))
+    val_indices = list(range(nb_train, len(train_data)))
+
+    train_loader = (
+        DataLoader(
+            Subset(train_data, train_indices),
+            batch_size=tbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=True,
+            collate_fn=dup_collate_fn(tdups),
+        )
+        if tdups > 1
+        else DataLoader(
+            Subset(train_data, train_indices),
+            batch_size=tbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=True,
+        )
+    )
+    val_loader = (
+        DataLoader(
+            Subset(val_data, val_indices),
+            batch_size=vbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=False,
+            collate_fn=dup_collate_fn(vdups),
+        )
+        if vdups > 1
+        else DataLoader(
+            Subset(val_data, val_indices),
+            batch_size=vbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=False,
+        )
+    )
+    return train_loader, val_loader
+
+
+def get_mnist_test_loader(
+    data_dir: str, workers: int, pin_memory: bool, batch: int, dups: int = 1
+) -> DataLoader:
+    mnist_dir = pjoin(data_dir, "mnist")
+    normalize = transforms.Normalize(MNISTInfo.mean, MNISTInfo.std)
+
+    test_data = datasets.MNIST(
+        root=mnist_dir,
+        train=False,
+        transform=transforms.Compose([transforms.ToTensor(), normalize]),
+        download=True,
+    )
+    test_loader = (
+        DataLoader(
+            test_data,
+            batch_size=batch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            shuffle=False,
+            pin_memory=pin_memory,
+            collate_fn=dup_collate_fn(dups),
+        )
+        if dups > 1
+        else DataLoader(
+            test_data,
+            batch_size=batch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            shuffle=False,
+            pin_memory=pin_memory,
+        )
+    )
+    return test_loader
+
+
+class FashionMNISTInfo:
+    outclass = 10
+    imgshape = (1, 28, 28)
+    counts = {"train": 60000, "test": 10000}
+    mean = (0.2860,)
+    std = (0.3530,)
+
+
+def get_fmnist_train_loaders(
+    data_dir: str,
+    train_val_split: float,
+    workers: int,
+    pin_memory: bool,
+    tbatch: int,
+    vbatch: int,
+    tdups: int = 1,
+    vdups: int = 1,
+) -> Tuple[DataLoader, DataLoader]:
+    fmnist_dir = pjoin(data_dir, "fmnist")
+    normalize = transforms.Normalize(FashionMNISTInfo.mean, FashionMNISTInfo.std)
+
+    train_data = datasets.FashionMNIST(
+        root=fmnist_dir,
+        train=True,
+        transform=transforms.Compose([transforms.ToTensor(), normalize]),
+        download=True,
+    )
+    val_data = datasets.FashionMNIST(
+        root=fmnist_dir,
+        train=True,
+        transform=transforms.Compose([transforms.ToTensor(), normalize]),
+        download=True,
+    )
+
+    nb_train = int(len(train_data) * train_val_split)
+    train_indices = list(range(nb_train))
+    val_indices = list(range(nb_train, len(train_data)))
+
+    train_loader = (
+        DataLoader(
+            Subset(train_data, train_indices),
+            batch_size=tbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=True,
+            collate_fn=dup_collate_fn(tdups),
+        )
+        if tdups > 1
+        else DataLoader(
+            Subset(train_data, train_indices),
+            batch_size=tbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=True,
+        )
+    )
+    val_loader = (
+        DataLoader(
+            Subset(val_data, val_indices),
+            batch_size=vbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=False,
+            collate_fn=dup_collate_fn(vdups),
+        )
+        if vdups > 1
+        else DataLoader(
+            Subset(val_data, val_indices),
+            batch_size=vbatch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            pin_memory=pin_memory,
+            shuffle=False,
+        )
+    )
+    return train_loader, val_loader
+
+
+def get_fmnist_test_loader(
+    data_dir: str, workers: int, pin_memory: bool, batch: int, dups: int = 1
+) -> DataLoader:
+    fmnist_dir = pjoin(data_dir, "fmnist")
+    normalize = transforms.Normalize(FashionMNISTInfo.mean, FashionMNISTInfo.std)
+
+    test_data = datasets.FashionMNIST(
+        root=fmnist_dir,
+        train=False,
+        transform=transforms.Compose([transforms.ToTensor(), normalize]),
+        download=True,
+    )
+    test_loader = (
+        DataLoader(
+            test_data,
+            batch_size=batch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            shuffle=False,
+            pin_memory=pin_memory,
+            collate_fn=dup_collate_fn(dups),
+        )
+        if dups > 1
+        else DataLoader(
+            test_data,
+            batch_size=batch,
+            num_workers=workers,
+            worker_init_fn=seed_worker,
+            generator=g,
+            shuffle=False,
+            pin_memory=pin_memory,
+        )
+    )
     return test_loader
 
 
@@ -742,35 +988,47 @@ def get_imagenet_test_loader(
 TRAINDATALOADERS = {
     "cifar10": get_cifar10_train_loaders,
     "cifar100": get_cifar100_train_loaders,
+    "mnist": get_mnist_train_loaders,
+    "fmnist": get_fmnist_train_loaders,
     "tinyimagenet": get_tinyimagenet_train_loaders,
 }
 # available datasets and corresponding test loader
 TESTDATALOADER = {
     "cifar10": get_cifar10_test_loader,
     "cifar100": get_cifar100_test_loader,
+    "mnist": get_mnist_test_loader,
+    "fmnist": get_fmnist_test_loader,
     "tinyimagenet": get_tinyimagenet_test_loader,
 }
 # number of training data
 NTRAIN = {
     "cifar10": CIFAR10Info.counts["train"],
     "cifar100": CIFAR100Info.counts["train"],
+    "mnist": MNISTInfo.counts["train"],
+    "fmnist": FashionMNISTInfo.counts["train"],
     "tinyimagenet": TinyImageNetInfo.counts["train"],
 }
 # number of test data
 NTEST = {
     "cifar10": CIFAR10Info.counts["test"],
     "cifar100": CIFAR100Info.counts["test"],
+    "mnist": MNISTInfo.counts["test"],
+    "fmnist": FashionMNISTInfo.counts["test"],
     "tinyimagenet": TinyImageNetInfo.counts["test"],
 }
 # input image size
 INSIZE = {
     "cifar10": CIFAR10Info.imgshape[-1],
     "cifar100": CIFAR100Info.imgshape[-1],
+    "mnist": MNISTInfo.imgshape[-1],
+    "fmnist": FashionMNISTInfo.imgshape[-1],
     "tinyimagenet": TinyImageNetInfo.imgshape[-1],
 }
 # number of classes
 OUTCLASS = {
     "cifar10": CIFAR10Info.outclass,
     "cifar100": CIFAR100Info.outclass,
+    "mnist": MNISTInfo.outclass,
+    "fmnist": FashionMNISTInfo.outclass,
     "tinyimagenet": TinyImageNetInfo.outclass,
 }

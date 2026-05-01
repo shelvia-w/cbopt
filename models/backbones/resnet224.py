@@ -1,3 +1,5 @@
+"""ResNet backbones for 224x224 ImageNet-style inputs."""
+
 # ResNet models for ImageNet input (224x224), adapted from torchvision
 from typing import Any, Callable, List, Optional, Type, Union
 from functools import partial

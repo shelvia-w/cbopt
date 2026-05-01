@@ -1,0 +1,40 @@
+# SWAG configuration
+# Train: qsub -v CONFIG=configs/swag.yaml pbs/train.pbs
+# Test:  qsub -v CONFIG=configs/swag.yaml pbs/test.pbs
+# OOD:   qsub -v CONFIG=configs/swag.yaml pbs/ood.pbs
+
+optimizer: swag
+dataset: cifar10
+model: resnet20_swag
+seeds: [0, 1, 2, 3, 4]
+device: cuda
+
+traindir: "swag/cifar10_resnet20/lr_3e-1_wd_2e-4_tf_0.2_nr_0.2"
+
+# --- Training arguments ---
+train_args:
+  lr: "3e-1"
+  e: "200"
+  weight-decay: "2e-4"
+  beta1: "0.9"
+  swag_start: "161"
+  swag_freq: "1"
+  tbatch: "50"
+  vbatch: "50"
+  tvsplit: "1.0"
+  j: "0"
+  tf: "0.2"
+  nr: "0.2"
+train_flags: []
+
+# --- Evaluation arguments ---
+seed_start: 0
+seed_end: 4
+eval_subdir: "eval"
+test_flags:
+  - pd
+
+# --- OOD evaluation ---
+ood_dataset: svhn
+ood_testsamples: 1
+ood_testrepeat: 1

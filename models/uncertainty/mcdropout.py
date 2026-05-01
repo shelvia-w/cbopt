@@ -1,3 +1,5 @@
+"""Monte Carlo dropout layers and helpers."""
+
 from torch import nn, Tensor
 import torch.nn.functional as nnf
 

@@ -1,4 +1,4 @@
-"""Run out-of-domain evaluation across saved uncertainty model checkpoints."""
+﻿"""Run out-of-domain evaluation across saved uncertainty model checkpoints."""
 
 import argparse
 import os
@@ -16,15 +16,15 @@ from methods.baselines.vogn import VOGN
 from models.uncertainty.swag import SWAG
 from models.uncertainty.duq import DUQModel
 from models.uncertainty.sngp import SNGPModel
-from training.checkpoint import loadcheckpoint
-from training.coroutines import coro_dict2csv, coro_timer
-from training.utils import check_cuda, deterministic_run, mkdirp
-from training.engine import do_epoch
-from training.evaluation import (
-    do_evalbatch_ood, do_evalbatch_von, do_evalbatch_swag,
-    do_evalbatch_duq, do_evalbatch_sngp,
-    get_outputsaver, coro_log_ood, confidence_from_prediction_npy,
+from core.checkpoint import loadcheckpoint
+from core.coroutines import coro_dict2csv, coro_timer
+from core.utils import check_cuda, deterministic_run, get_outputsaver, mkdirp
+from core.engine import do_epoch
+from core.evaluation import (
+    predict_proba_batch, predict_proba_von, predict_proba_swag,
+    predict_proba_duq, predict_proba_sngp,
 )
+from core.ood import coro_log_ood, confidence_from_prediction_npy
 from data.dataloaders import get_cifar10_test_loader
 from data.ood_utils import (
     get_svhn_loader, get_flowers102_loader, auroc, OODMetrics,
@@ -78,6 +78,7 @@ def get_args():
     parser.add_argument("-dd", "--data_dir", default="../data", type=str)
     parser.add_argument("-sms", "--swag_modelsamples", type=int, default=1)
     parser.add_argument("-ssm", "--swag_samplemode", default="modelwise", choices=SWAG.sample_mode)
+    parser.add_argument("--checkpoint", default="best", choices=("best", "latest"))
     parser.add_argument("--pred_type", default="glm", choices=["glm", "nn", "linear_sampling", "mc"])
     parser.add_argument("--link_approx", default="probit", choices=["mc", "probit", "bridge", "bridge_norm"])
     parser.add_argument("--n_samples", default=100, type=int)
@@ -116,26 +117,26 @@ def _run_eval(loader, model, optimizer, la, modelname, args, log_ece, device):
                  la=la, pred_type=args.pred_type, link_approx=args.link_approx, n_samples=args.n_samples)
     elif isinstance(optimizer, (IVON, VOGN)):
         model.eval()
-        do_epoch(loader, do_evalbatch_von, log_ece, device, model=model, optimizer=optimizer, repeat=args.testrepeat)
+        do_epoch(loader, predict_proba_von, log_ece, device, model=model, optimizer=optimizer, repeat=args.testrepeat)
     elif isinstance(model, SWAG):
         sampledmodels = [model.sampled_model(mode=args.swag_samplemode) for _ in range(args.swag_modelsamples)]
         for m in sampledmodels:
             m.eval()
-        do_epoch(loader, do_evalbatch_swag, log_ece, device, models=sampledmodels)
+        do_epoch(loader, predict_proba_swag, log_ece, device, models=sampledmodels)
     elif isinstance(model, DUQModel):
         model.eval()
-        do_epoch(loader, do_evalbatch_duq, log_ece, device, model=model)
+        do_epoch(loader, predict_proba_duq, log_ece, device, model=model)
     elif isinstance(model, SNGPModel):
         model.eval()
         if hasattr(model, "set_update_covariance"):
             model.set_update_covariance(False)
-        do_epoch(loader, do_evalbatch_sngp, log_ece, device, model=model)
+        do_epoch(loader, predict_proba_sngp, log_ece, device, model=model)
     elif modelname == "resnet20_mcdrop":
         enable_mc_dropout(model)
-        do_epoch(loader, do_evalbatch_ood, log_ece, device, model=model, dups=args.testsamples, repeat=args.testrepeat)
+        do_epoch(loader, predict_proba_batch, log_ece, device, model=model, dups=args.testsamples, repeat=args.testrepeat)
     else:
         model.eval()
-        do_epoch(loader, do_evalbatch_ood, log_ece, device, model=model, dups=args.testsamples, repeat=args.testrepeat)
+        do_epoch(loader, predict_proba_batch, log_ece, device, model=model, dups=args.testsamples, repeat=args.testrepeat)
 
 
 if __name__ == "__main__":
@@ -164,11 +165,13 @@ if __name__ == "__main__":
 
     for runfolder in glob(f"{args.traindir}/seed=*/*"):
         save_name = os.path.relpath(runfolder, args.traindir).replace(os.sep, "_")
-        model_path = pjoin(runfolder, "checkpoint.pt")
+        checkpoint_name = "best_checkpoint.pt" if args.checkpoint == "best" else "checkpoint.pt"
+        model_path = pjoin(runfolder, checkpoint_name)
         laplace_path = pjoin(runfolder, "laplace_state.pt")
 
         if not exists(model_path):
-            print(f"skipping {runfolder}\n")
+            hint = " (use --checkpoint latest to load checkpoint.pt)" if args.checkpoint == "best" else ""
+            print(f"skipping {runfolder}: no {checkpoint_name} found{hint}\n")
             continue
         valid_runs.append(save_name)
 
@@ -256,7 +259,8 @@ if __name__ == "__main__":
 
     compute_and_save_metrics(args.save_dir, "", valid_runs)
 
-    from training.utils import summarize_csv
+    from core.utils import summarize_csv
     summarize_csv(pjoin(args.save_dir, "metrics_test.csv"))
     print(f">>> Test completed at {next(timer)[0].isoformat()} <<<\n")
     log_ece.close()
+

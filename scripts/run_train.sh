@@ -43,10 +43,15 @@ def to_module_name(value):
     return module
 
 # Map optimizer names to training modules (baseline methods share one module)
-BASELINE_OPTS = {'sgd', 'adamw', 'ivon', 'adahessian', 'mcdrop'}
-_script_map = {opt: 'experiments.train_baseline' for opt in BASELINE_OPTS}
+BASELINE_OPTS = {'sgd', 'adamw', 'adahessian', 'mcdrop', 'swag'}
+_script_map = {opt: 'experiments.train_standard' for opt in BASELINE_OPTS}
 _script_map.update(
-    {'ucbopt': 'experiments.train_ucbopt', 'duq': 'experiments.train_duq', 'sngp': 'experiments.train_sngp'}
+    {
+        'ivon': 'experiments.train_ivon',
+        'ucbopt': 'experiments.train_ucbopt',
+        'duq': 'experiments.train_duq',
+        'sngp': 'experiments.train_sngp',
+    }
 )
 script = to_module_name(c.get('train_script', _script_map.get(optimizer, f"experiments.train_{optimizer}")))
 
@@ -58,7 +63,7 @@ def to_flag(key):
     return f"-{key}" if len(key) <= 2 else f"--{key}"
 
 extra = []
-# Baseline methods: inject --optimizer flag so experiments.train_baseline knows which to use
+# Standard methods: inject --optimizer flag so experiments.train_standard knows which to use
 if optimizer in BASELINE_OPTS and not c.get('train_script'):
     extra += ['--optimizer', optimizer]
 for key, val in c.get('train_args', {}).items():

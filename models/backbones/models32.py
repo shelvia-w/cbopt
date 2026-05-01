@@ -1,3 +1,5 @@
+"""Backbone model definitions for 32x32 image inputs such as CIFAR."""
+
 # models for 3x32x32 image inputs, e.g., CIFAR-10 / CIFAR-100
 from typing import Tuple
 import torch

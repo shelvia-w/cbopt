@@ -1,3 +1,5 @@
+"""Model constructors, serialization helpers, and public model registries."""
+
 from typing import Any, Iterable, Mapping
 from functools import partial
 import numpy as np
@@ -6,6 +8,7 @@ from torch import nn
 
 from .backbones.models32 import get_model
 from .backbones.grudense import GRUDense
+from .backbones.lenet import LeNet
 from .backbones.frn import FilterResponseNorm, FilterResponseNormLipschitz
 from .backbones.resnet224 import resnet50
 from .uncertainty.swag import SWAG
@@ -45,6 +48,10 @@ def resnet20(outclass: int, input_size: int = 32, norm_layer=FilterResponseNorm)
         activation=torch.nn.Identity,
         norm_layer=norm_layer,
     )
+
+
+def lenet(outclass: int, input_size: int = 28) -> torch.nn.Module:
+    return LeNet(outclass, input_size)
 
 
 def resnet20_sngp(
@@ -149,6 +156,7 @@ def resnet50_imagenet(outclass: int, input_size: int = 224) -> torch.nn.Module:
 
 
 STANDARDMODELS = {
+    "lenet": lenet,
     "resnet20": resnet20,
     "resnet18wide": resnet18wide,
     "preresnet110": preresnet110,

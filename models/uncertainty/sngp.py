@@ -1,3 +1,5 @@
+"""Spectral-normalized neural Gaussian process model components."""
+
 from __future__ import annotations
 
 import math

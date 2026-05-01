@@ -1,3 +1,5 @@
+"""SWAG uncertainty model implementation and sampling utilities."""
+
 # Modified from https://github.com/izmailovpavel/understandingbdl
 # which is by Pavel Izmailov released under BSD 2-Clause License
 import copy

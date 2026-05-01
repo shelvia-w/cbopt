@@ -1,7 +1,16 @@
-"""Data-specific helpers shared across dataset and training scripts."""
+"""Data-specific helpers."""
 
 import random
+import torch
 
+
+def dup_collate_fn(dups: int):
+    """Create a collate function that duplicates input images."""
+    def collate_fn(data):
+        imgs, gts = tuple(zip(*data))
+        t = torch.stack(imgs, dim=0)
+        return t.repeat(dups, *(1,) * (t.ndim - 1)), torch.as_tensor(gts)
+    return collate_fn
 
 def corrupt_labels(dataset, noise_rate, seed=None, indices=None):
     """Randomly corrupt dataset labels at the given noise rate."""

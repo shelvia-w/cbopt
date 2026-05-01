@@ -1,3 +1,5 @@
+"""Implementation of the IVON optimizer."""
+
 from math import pow
 from typing import Callable, Optional, Tuple
 from contextlib import contextmanager

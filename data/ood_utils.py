@@ -1,3 +1,5 @@
+"""Out-of-domain dataset loaders and OOD metric helpers."""
+
 from typing import Tuple, Dict
 from os.path import join as pjoin
 import statistics
@@ -9,7 +11,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 import torchvision.transforms as transforms
 
-from training.evaluation import dup_collate_fn
+from data_utils import dup_collate_fn
 
 
 class SVHNInfo:

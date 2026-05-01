@@ -1,3 +1,5 @@
+"""Archived slower reference implementation of the uCBOpt optimizer."""
+
 from __future__ import annotations
 
 from typing import Callable, Optional

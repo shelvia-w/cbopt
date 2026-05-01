@@ -1,4 +1,4 @@
-"""Train a DUQ model and evaluate it during training."""
+﻿"""Train a DUQ model and evaluate it during training."""
 
 import argparse
 import os
@@ -9,13 +9,13 @@ import torch
 import torch.nn.functional as nnf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from training.coroutines import coro_timer
-from training.logging import coro_log_timed
-from training.utils import check_cuda, deterministic_run, mkdirp
+from core.coroutines import coro_timer
+from core.logging import coro_log_timed
+from core.utils import check_cuda, deterministic_run, mkdirp
 from models.uncertainty.duq import DUQModel, FeatureExtractor, calc_gradient_penalty
 from models import STANDARDMODELS
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, NTRAIN, OUTCLASS, INSIZE
-from training.engine import SummaryWriter, do_epoch
+from core.engine import SummaryWriter, do_epoch
 
 
 def get_args():
@@ -116,7 +116,7 @@ def do_trainbatch_duq(batchinput, model, optimizer, lambda_gp):
 
 
 @torch.no_grad()
-def do_evalbatch_duq(batchinput, model):
+def predict_proba_duq(batchinput, model):
     images, target = batchinput
     scores = model(images)
     prob = scores / scores.sum(dim=1, keepdim=True).clamp_min(1e-12)
@@ -227,16 +227,17 @@ if __name__ == "__main__":
 
         log_ece.send((e, "test", len(test_loader), None))
         model.eval()
-        do_epoch(test_loader, do_evalbatch_duq, log_ece, device, model=model)
+        do_epoch(test_loader, predict_proba_duq, log_ece, device, model=model)
         log_ece.throw(StopIteration)
 
         if len(val_loader) != 0:
             log_ece.send((e, "val", len(val_loader), None))
             model.eval()
-            do_epoch(val_loader, do_evalbatch_duq, log_ece, device, model=model)
+            do_epoch(val_loader, predict_proba_duq, log_ece, device, model=model)
             log_ece.throw(StopIteration)
 
         print(f">>> Time elapsed: {next(timer)[1]} <<<\n")
 
     log_ece.close()
     print(f">>> Training completed at {next(timer)[0].isoformat()} <<<\n")
+

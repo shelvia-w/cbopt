@@ -1,3 +1,5 @@
+"""Filter Response Normalization layers and related building blocks."""
+
 import torch
 from torch import Tensor, nn
 from torch.nn.utils import parametrize

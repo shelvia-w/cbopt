@@ -1,4 +1,4 @@
-"""Evaluate saved in-domain checkpoints and write prediction summaries."""
+﻿"""Evaluate saved in-domain checkpoints and write prediction summaries."""
 
 import argparse
 import os
@@ -9,12 +9,12 @@ from glob import glob
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from training.checkpoint import loadcheckpoint
-from training.coroutines import coro_timer
-from training.logging import coro_log_metrics
-from training.utils import check_cuda, deterministic_run, get_outputsaver, mkdirp, summarize_csv
-from training.engine import do_epoch, do_evalbatch
-from training.calibration import bins2diagram
+from core.checkpoint import loadcheckpoint
+from core.coroutines import coro_timer
+from core.logging import coro_log_metrics
+from core.utils import check_cuda, deterministic_run, get_outputsaver, mkdirp, summarize_csv
+from core.engine import do_epoch, do_evalbatch
+from core.calibration import bins2diagram
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, OUTCLASS, NTRAIN, NTEST
 
 
@@ -36,6 +36,7 @@ def get_args():
     p.add_argument("-dd", "--data_dir", default="../data", type=str)
     p.add_argument("-nb", "--bins", default=20, type=int)
     p.add_argument("-pd", "--plotdiagram", action="store_true")
+    p.add_argument("--checkpoint", default="best", choices=("best", "latest"))
     return p.parse_args()
 
 
@@ -84,10 +85,12 @@ if __name__ == "__main__":
     for seed in range(args.seed_start, args.seed_end + 1):
         runfolder = f"seed={seed}"
         seed_dir = pjoin(args.traindir, runfolder)
-        model_paths = sorted(glob(pjoin(seed_dir, "*", "checkpoint.pt")))
+        checkpoint_name = "best_checkpoint.pt" if args.checkpoint == "best" else "checkpoint.pt"
+        model_paths = sorted(glob(pjoin(seed_dir, "*", checkpoint_name)))
 
         if not model_paths:
-            print(f"skipping {seed_dir}\n")
+            hint = " (use --checkpoint latest to load checkpoint.pt)" if args.checkpoint == "best" else ""
+            print(f"skipping {seed_dir}: no {checkpoint_name} found{hint}\n")
             continue
 
         model_path = model_paths[-1]
@@ -133,3 +136,4 @@ if __name__ == "__main__":
     summarize_csv(pjoin(args.save_dir, f"{prefix}.csv"))
     log_metrics.close()
     print(f">>> Test completed at {next(timer)[0].isoformat()} <<<\n")
+

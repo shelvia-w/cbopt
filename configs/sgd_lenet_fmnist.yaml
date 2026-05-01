@@ -1,0 +1,25 @@
+optimizer: sgd
+dataset: fmnist
+model: lenet
+seeds: [0, 1, 2]
+device: cuda
+
+traindir: "tuning/sgd/{dataset}_{model}/lr_{lr}_wd_{weight-decay}"
+
+train_args:
+  lr: "1e-2"
+  e: "30"
+  weight-decay: "1e-4"
+  beta1: "0.9"
+  tbatch: "128"
+  vbatch: "256"
+  tvsplit: "0.9"
+  j: "0"
+
+train_flags: []
+
+seed_start: 0
+seed_end: 2
+eval_subdir: "eval"
+test_flags:
+  - pd

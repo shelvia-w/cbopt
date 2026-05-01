@@ -1,4 +1,4 @@
-"""Evaluate saved DUQ checkpoints and summarize their predictions."""
+﻿"""Evaluate saved DUQ checkpoints and summarize their predictions."""
 
 import argparse
 import os
@@ -10,11 +10,11 @@ import torch
 import torch.nn.functional as nnf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from training.coroutines import coro_timer
-from training.logging import coro_log_metrics
-from training.utils import check_cuda, deterministic_run, get_outputsaver, mkdirp, summarize_csv
-from training.engine import do_epoch
-from training.calibration import bins2diagram
+from core.coroutines import coro_timer
+from core.logging import coro_log_metrics
+from core.utils import check_cuda, deterministic_run, get_outputsaver, mkdirp, summarize_csv
+from core.engine import do_epoch
+from core.calibration import bins2diagram
 from models import STANDARDMODELS
 from models.uncertainty.duq import DUQModel
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, OUTCLASS, NTRAIN, NTEST, INSIZE
@@ -72,7 +72,7 @@ def load_duq_checkpoint(model_path, args, device):
 
 
 @torch.no_grad()
-def do_evalbatch_duq(batchinput, model):
+def predict_proba_duq(batchinput, model):
     images, target = batchinput
     scores = model(images)
     prob = scores / scores.sum(dim=1, keepdim=True).clamp_min(1e-12)
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         log_metrics.send((runfolder, prefix, len(data_loader), outputsaver))
         with torch.no_grad():
             model.eval()
-            do_epoch(data_loader, do_evalbatch_duq, log_metrics, device, model=model)
+            do_epoch(data_loader, predict_proba_duq, log_metrics, device, model=model)
 
         bins, _, avgvloss = log_metrics.throw(StopIteration)[:3]
         if args.saveoutput:
@@ -150,3 +150,4 @@ if __name__ == "__main__":
     summarize_csv(pjoin(args.save_dir, f"{prefix}.csv"))
     log_metrics.close()
     print(f">>> Test completed at {next(timer)[0].isoformat()} <<<\n")
+

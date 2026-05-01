@@ -1,3 +1,5 @@
+"""Implementation of the VOGN optimizer and its closure helpers."""
+
 from typing import Callable, Tuple, Dict, Optional
 from contextlib import contextmanager
 from math import sqrt

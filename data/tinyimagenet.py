@@ -1,10 +1,12 @@
+﻿"""Tiny ImageNet dataset preparation and loading utilities."""
+
 from typing import Optional, Callable
 from os import rename, rmdir
 from os.path import join as opjoin, exists as opexists
 from torchvision.datasets import ImageFolder
 from torchvision.datasets.utils import download_and_extract_archive
 from torchvision.transforms import ToTensor
-from training.utils import mkdirp
+from core.utils import mkdirp
 
 
 class TinyImageNet(ImageFolder):
@@ -56,3 +58,4 @@ class TinyImageNet(ImageFolder):
             if opexists(opjoin(val_img_dir, img)):
                 rename(opjoin(val_img_dir, img), opjoin(newpath, img))
         rmdir(val_img_dir)
+
