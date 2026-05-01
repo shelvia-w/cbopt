@@ -1,42 +1,37 @@
-﻿"""Unified baseline training script for SGD, AdamW, AdaHessian, MCDrop, and SWAG."""
+"""Train a model with the uCBOpt Adaptive Curvature optimizer."""
+
 import argparse
-import math
 import os
 import sys
 from os.path import join as pjoin
 
 import torch
-import torch.nn.functional as nnf
 from torch.utils.data import Subset, DataLoader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from data.data_utils import corrupt_labels
+from methods.ucbopt_adaptcurv import uCBOptAdaptCurv
 from core.checkpoint import loadcheckpoint, savecheckpoint
 from core.coroutines import coro_timer
 from core.logging import coro_log_timed
 from core.utils import check_cuda, deterministic_run, mkdirp
-from models import STANDARDMODELS, MCDROPMODELS, SWAGMODELS
-from models.uncertainty.swag import SWAG
+from models import STANDARDMODELS
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, NTRAIN, OUTCLASS, INSIZE
 from core.engine import SummaryWriter, do_epoch, do_evalbatch, do_trainbatch
 
-ALL_MODELS = {**STANDARDMODELS, **MCDROPMODELS, **SWAGMODELS}
-BASELINE_OPTIMIZERS = ("sgd", "adamw", "adahessian", "mcdrop", "swag")
-
 
 def get_args():
-    p = argparse.ArgumentParser(description="Baseline training (SGD / AdamW / AdaHessian / MCDrop / SWAG)")
+    p = argparse.ArgumentParser(description="uCBOpt Adaptive Curvature training")
 
-    p.add_argument("arch", choices=ALL_MODELS)
-    p.add_argument("--optimizer", required=True, choices=BASELINE_OPTIMIZERS)
-    p.add_argument("dataset", choices=TRAINDATALOADERS)
-    p.add_argument("-j", "--workers", default=0, type=int)
-    p.add_argument("-tb", "--tbatch", default=512, type=int)
-    p.add_argument("-vb", "--vbatch", default=512, type=int)
-    p.add_argument("-sp", "--tvsplit", default=0.9, type=float)
-    p.add_argument("-tf", "--train_fraction", default=1.0, type=float)
-    p.add_argument("-nr", "--noise_rate", default=0.0, type=float)
-    p.add_argument("-e", "--epochs", default=200, type=int)
+    p.add_argument("arch", choices=STANDARDMODELS, help="model architecture")
+    p.add_argument("dataset", choices=TRAINDATALOADERS, help="dataset")
+    p.add_argument("-j", "--workers", default=0, type=int, help="data loader workers")
+    p.add_argument("-tb", "--tbatch", default=512, type=int, help="train batch size")
+    p.add_argument("-vb", "--vbatch", default=512, type=int, help="eval batch size")
+    p.add_argument("-sp", "--tvsplit", default=0.9, type=float, help="train split ratio")
+    p.add_argument("-tf", "--train_fraction", default=1.0, type=float, help="fraction of training data to keep")
+    p.add_argument("-nr", "--noise_rate", default=0.0, type=float, help="label noise rate")
+    p.add_argument("-e", "--epochs", default=400, type=int, help="epochs")
     p.add_argument("-d", "--device", default="cpu", type=str)
     p.add_argument("-s", "--seed", type=int)
     p.add_argument("-r", "--resume", default="", type=str)
@@ -48,57 +43,43 @@ def get_args():
     p.add_argument("-nb", "--bins", default=20, type=int)
     p.add_argument("-pd", "--plotdiagram", action="store_true")
 
-    p.add_argument("-lr", "--learning_rate", default=0.1, type=float)
+    p.add_argument("-lr", "--learning_rate", default=0.01, type=float)
     p.add_argument("--lr_final", default=0.0, type=float)
     p.add_argument("--warmup", default=5, type=int)
-    p.add_argument("--rescale_lr", action="store_true")
 
     p.add_argument("--wd", "--weight-decay", dest="weight_decay", default=1e-4, type=float)
     p.add_argument("--beta1", default=0.9, type=float)
-    p.add_argument("--beta2", default=0.99999, type=float)
+    p.add_argument("--beta2", default=0.999, type=float)
+    p.add_argument("--beta3", default=0.999, type=float)
     p.add_argument("--hess_init", default=0.5, type=float)
-
-    # SWAG-specific
-    p.add_argument("--swag_start", default=161, type=int)
-    p.add_argument("--swag_freq", default=1, type=int)
+    p.add_argument("--gamma", default=0.1, type=float, help="adaptive curvature weight")
+    p.add_argument("--eps", default=1e-8, type=float)
+    p.add_argument("--clip-radius", default=float("inf"), type=float,
+                   help="elementwise update clipping radius (inf = disabled)")
+    p.add_argument("--bias-corr", action="store_true", default=True,
+                   help="apply bias correction to m and h (default: on)")
+    p.add_argument("--no-bias-corr", dest="bias_corr", action="store_false")
+    p.add_argument("--decoupled-wd", action="store_true", default=False,
+                   help="apply weight decay decoupled from the preconditioner")
+    p.add_argument("--maximize", action="store_true", default=False)
 
     return p.parse_args()
 
 
 def build_optimizer(args, model):
-    if args.optimizer == "sgd":
-        return torch.optim.SGD(
-            model.parameters(),
-            lr=args.learning_rate,
-            momentum=args.beta1,
-            weight_decay=args.weight_decay,
-        )
-    elif args.optimizer in ("adamw", "mcdrop"):
-        return torch.optim.AdamW(
-            model.parameters(),
-            lr=args.learning_rate,
-            betas=(args.beta1, args.beta2),
-            weight_decay=args.weight_decay,
-        )
-    elif args.optimizer == "swag":
-        if not isinstance(model, SWAG):
-            raise ValueError("optimizer='swag' requires a SWAG model such as resnet20_swag")
-        return torch.optim.SGD(
-            model.parameters(),
-            lr=args.learning_rate,
-            momentum=args.beta1,
-            weight_decay=args.weight_decay,
-        )
-    elif args.optimizer == "adahessian":
-        from methods.baselines.adahessian import AdaHessian
-        return AdaHessian(
-            model.parameters(),
-            lr=args.learning_rate,
-            betas=(args.beta1, args.beta2),
-            weight_decay=args.weight_decay,
-        )
-    else:
-        raise ValueError(f"Unknown optimizer: {args.optimizer}")
+    return uCBOptAdaptCurv(
+        model.parameters(),
+        lr=args.learning_rate,
+        betas=(args.beta1, args.beta2, args.beta3),
+        weight_decay=args.weight_decay,
+        hess_init=args.hess_init,
+        gamma=args.gamma,
+        eps=args.eps,
+        clip_radius=args.clip_radius,
+        bias_corr=args.bias_corr,
+        decoupled_wd=args.decoupled_wd,
+        maximize=args.maximize,
+    )
 
 
 def build_scheduler(args, optimizer):
@@ -137,7 +118,7 @@ if __name__ == "__main__":
         startepoch = 0
         modelargs = (OUTCLASS[args.dataset], INSIZE[args.dataset])
         modelkwargs = {}
-        model = ALL_MODELS[args.arch](*modelargs, **modelkwargs).to(device)
+        model = STANDARDMODELS[args.arch](*modelargs, **modelkwargs).to(device)
         optimizer = build_optimizer(args, model)
         scheduler = build_scheduler(args, optimizer)
 
@@ -198,29 +179,6 @@ if __name__ == "__main__":
 
     log_ece = coro_log_timed(sw, args.printfreq, args.bins, args.save_dir)
     checkpoint_epochs = [0, 1, 2, 5, 10, 20, 30, 40, 50, 75, 100, 150, 200]
-    has_validation = len(val_loader) > 0
-    best_metric_name = "val_loss"
-    if has_validation:
-        best_val_metric = float("inf")
-        best_val_epoch = None
-        best_checkpoint_path = pjoin(args.save_dir, "best_checkpoint.pt")
-        if os.path.exists(best_checkpoint_path):
-            _, _, _, _, best_checkpoint_meta = loadcheckpoint(best_checkpoint_path, device)
-            best_val_metric = best_checkpoint_meta.get("best_val_metric", best_val_metric)
-            best_val_epoch = best_checkpoint_meta.get("best_val_epoch", best_val_epoch)
-
-    # pick the right training batch function
-    if args.optimizer == "adahessian":
-        def _trainbatch(batchinput, model, optimizer):
-            optimizer.zero_grad(set_to_none=True)
-            inputs, gt = batchinput[:-1], batchinput[-1]
-            output = model(*inputs)
-            loss = nnf.cross_entropy(output, gt)
-            loss.backward(create_graph=True)
-            optimizer.step()
-            return nnf.softmax(output.detach(), 1), gt, loss.item()
-    else:
-        _trainbatch = do_trainbatch
 
     for e in range(startepoch, args.epochs):
         if args.warmup > 0 and e == args.warmup:
@@ -231,20 +189,11 @@ if __name__ == "__main__":
 
         model.train()
         log_ece.send((e, "train", len(train_loader), None))
-        do_epoch(train_loader, _trainbatch, log_ece, device, model=model, optimizer=optimizer)
+        do_epoch(train_loader, do_trainbatch, log_ece, device, model=model, optimizer=optimizer)
         log_ece.throw(StopIteration)
 
         if scheduler is not None:
             scheduler.step()
-
-        should_collect_swag = (
-            args.optimizer == "swag"
-            and e >= args.swag_start
-            and (e - args.swag_start) % args.swag_freq == 0
-        )
-        if should_collect_swag:
-            model.collect_model()
-            print(f"Collected SWAG model {model.n_models.item()} at epoch {e}")
 
         savecheckpoint(
             pjoin(args.save_dir, "checkpoint.pt"),
@@ -272,39 +221,16 @@ if __name__ == "__main__":
             do_epoch(test_loader, do_evalbatch, log_ece, device, model=model)
         log_ece.throw(StopIteration)
 
-        if not has_validation:
+        if len(val_loader) == 0:
             continue
 
         log_ece.send((e, "val", len(val_loader), None))
         with torch.no_grad():
             model.eval()
             do_epoch(val_loader, do_evalbatch, log_ece, device, model=model)
-        val_metrics = log_ece.throw(StopIteration)
-
-        _, val_loss, *_ = val_metrics
-        if math.isfinite(val_loss) and val_loss < best_val_metric:
-            best_val_metric = val_loss
-            best_val_epoch = e
-            savecheckpoint(
-                best_checkpoint_path,
-                args.arch,
-                modelargs,
-                modelkwargs,
-                model,
-                optimizer,
-                scheduler,
-                epoch=e,
-                best_val_metric_name=best_metric_name,
-                best_val_metric=best_val_metric,
-                best_val_epoch=best_val_epoch,
-            )
-            print(
-                f"New best checkpoint saved at epoch {e} "
-                f"with {best_metric_name}={best_val_metric:.4f}"
-            )
+        log_ece.throw(StopIteration)
 
         print(f">>> Time elapsed: {next(timer)[1]} <<<\n")
 
     log_ece.close()
     print(f">>> Training completed at {next(timer)[0].isoformat()} <<<\n")
-

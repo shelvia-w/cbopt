@@ -1,0 +1,31 @@
+optimizer: sgd
+dataset: fmnist
+model: lenet
+seeds: [0, 1, 2]
+device: cuda
+
+traindir: "final/sgd/{dataset}_{model}/lr_{lr}_wd_{weight-decay}_ep_{e}/seed={seed}"
+
+train_args:
+  lr: "1e-2"
+  e: "100"
+  weight-decay: "1e-4"
+  momentum: "0.9"
+  tbatch: "128"
+  vbatch: "256"
+  tvsplit: "1.0"
+  j: "0"
+
+train_flags: []
+
+seed_start: 0
+seed_end: 2
+eval_subdir: "eval"
+
+test_args:
+  tvsplit: "1.0"
+  batch: "256"
+  j: "0"
+
+test_flags:
+  - pd

@@ -1,14 +1,33 @@
-numpy
-einops
-pillow
-scipy
-matplotlib
-scikit-learn
-torch
-torchvision
-datasets
-tqdm
-bayesian-torch
+# Python version used in the conda env: 3.11.14
+
+# Core scientific stack
+numpy==1.26.4
+scipy==1.16.3
+scikit-learn==1.8.0
+matplotlib==3.10.8
+pillow==12.0.0
+tqdm==4.67.1
+pandas==3.0.0
+pyyaml==6.0.3
+
+# PyTorch stack
+torch==2.10.0
+torchvision==0.25.0
+torchmetrics==1.9.0
+
+# Bayesian / curvature / optimizer tools
 ivon-opt==0.1.2
-wandb
-tiktoken
+laplace-torch==0.2.2.2
+backpack-for-pytorch==1.7.1
+bayesian-torch==0.5.0
+curvlinops-for-pytorch==2.0.1
+asdfghjkl==0.1a4
+
+# Experiment tracking / logging
+tensorboard==2.20.0
+wandb==0.24.0
+
+# Datasets / utilities
+datasets==4.5.0
+einops==0.8.1
+tiktoken==0.12.0

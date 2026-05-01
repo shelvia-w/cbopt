@@ -5,7 +5,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 matplotlib.use("pdf")  # for remote machines without GUI
-from .utils import autoinitcoroutine
+from .coroutines import autoinitcoroutine
 
 
 BINSTYPE = Tuple[List[int], List[int], List[float]]

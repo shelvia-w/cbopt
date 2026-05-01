@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 import torchvision.transforms as transforms
 
-from data_utils import dup_collate_fn
+from .data_utils import dup_collate_fn
 
 
 class SVHNInfo:

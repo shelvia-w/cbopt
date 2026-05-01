@@ -20,6 +20,7 @@ class uCBOpt(torch.optim.Optimizer):
         hess_init: float = 0.5,         
         weight_decay: float = 0.0,   
         cand_curvature: float = 0.0,
+        eps: float = 1e-8,
         rescale_lr: bool = True,
     ):
 
@@ -36,7 +37,12 @@ class uCBOpt(torch.optim.Optimizer):
         if cand_curvature < 0.0:
             raise ValueError(f"cand_curvature must be >= 0, got {cand_curvature}")
         if cand_curvature > weight_decay:
-            raise ValueError(f"cand_curvature must be <= weight_decay (got cand_curvature={cand_curvature}, weight_decay={weight_decay})")
+            raise ValueError(
+                "cand_curvature must be <= weight_decay "
+                f"(got cand_curvature={cand_curvature}, weight_decay={weight_decay})"
+            )
+        if eps <= 0.0:
+            raise ValueError(f"eps must be > 0, got {eps}")
         if not isinstance(rescale_lr, bool):
             raise TypeError(f"rescale_lr must be bool, got {type(rescale_lr).__name__}")
 
@@ -47,6 +53,7 @@ class uCBOpt(torch.optim.Optimizer):
             hess_init=hess_init,
             weight_decay=weight_decay,
             cand_curvature=cand_curvature,
+            eps=eps,
             rescale_lr=rescale_lr,
         )
         super().__init__(params, defaults)
@@ -65,8 +72,9 @@ class uCBOpt(torch.optim.Optimizer):
             hess_init: float = group["hess_init"]
             wd: float = group["weight_decay"]
             cand: float = group["cand_curvature"]
+            eps: float = group["eps"]
             rescale_lr: bool = group["rescale_lr"]
-            lr_eff = lr_base * (hess_init + wd - cand) if rescale_lr else lr_base
+            lr_eff = lr_base * (hess_init + wd) if rescale_lr else lr_base
 
             params_with_grad: list[Tensor] = []
             grads: list[Tensor] = []
@@ -111,6 +119,7 @@ class uCBOpt(torch.optim.Optimizer):
 
             denom = torch._foreach_add(v_list, wd)
             torch._foreach_sub_(denom, cand)
+            torch._foreach_clamp_min_(denom, eps)
             numer = torch._foreach_add(m_bar, params_with_grad, alpha=wd)
 
             step_dir = torch._foreach_div(numer, denom)
