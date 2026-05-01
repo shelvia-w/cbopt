@@ -12,7 +12,6 @@ import torch.nn as nn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from models import STANDARDMODELS
 from methods.baselines.ivon import IVON
-from methods.baselines.vogn import VOGN
 from models.uncertainty.swag import SWAG
 from models.uncertainty.duq import DUQModel
 from models.uncertainty.sngp import SNGPModel
@@ -115,7 +114,7 @@ def _run_eval(loader, model, optimizer, la, modelname, args, log_ece, device):
     if la is not None:
         do_epoch(loader, do_evalbatch_laplace, log_ece, device,
                  la=la, pred_type=args.pred_type, link_approx=args.link_approx, n_samples=args.n_samples)
-    elif isinstance(optimizer, (IVON, VOGN)):
+    elif isinstance(optimizer, IVON):
         model.eval()
         do_epoch(loader, predict_proba_von, log_ece, device, model=model, optimizer=optimizer, repeat=args.testrepeat)
     elif isinstance(model, SWAG):

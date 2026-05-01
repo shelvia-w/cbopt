@@ -257,11 +257,8 @@ if __name__ == "__main__":
         log_ece.send((e, "val", len(val_loader), None))
         with torch.no_grad():
             model.eval()
-            val_metrics = do_epoch(val_loader, do_evalbatch, log_ece, device, model=model)
-        try:
-            log_ece.throw(StopIteration)
-        except StopIteration:
-            pass
+            do_epoch(val_loader, do_evalbatch, log_ece, device, model=model)
+        val_metrics = log_ece.throw(StopIteration)
 
         _, val_loss, *_ = val_metrics
         if math.isfinite(val_loss) and val_loss < best_val_metric:
