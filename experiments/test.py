@@ -36,6 +36,8 @@ def get_args():
     p.add_argument("-dd", "--data_dir", default="../data", type=str)
     p.add_argument("-nb", "--bins", default=20, type=int)
     p.add_argument("-pd", "--plotdiagram", action="store_true")
+    p.add_argument("-tr", "--testrepeat", default=1, type=int,
+                   help="Number of stochastic forward passes to average (e.g. 64 for MC Dropout).")
     p.add_argument("--checkpoint", default="best", choices=("best", "latest"))
     return p.parse_args()
 
@@ -117,7 +119,8 @@ if __name__ == "__main__":
         log_metrics.send((runfolder, prefix, len(data_loader), outputsaver))
         with torch.no_grad():
             model.eval()
-            do_epoch(data_loader, do_evalbatch, log_metrics, device, model=model)
+            do_epoch(data_loader, do_evalbatch, log_metrics, device,
+                     model=model, repeat=args.testrepeat)
 
         bins, _, avgvloss = log_metrics.throw(StopIteration)[:3]
         if args.saveoutput:
