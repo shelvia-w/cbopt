@@ -1,6 +1,6 @@
 optimizer: swag
 dataset: fmnist
-model: lenet
+model: lenet_swag
 seeds: [0, 1, 2]
 device: cuda
 

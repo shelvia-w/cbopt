@@ -25,9 +25,6 @@ class LeNet(nn.Module):
         if feature_size <= 0:
             raise ValueError(f"input_size={input_size} is too small for LeNet")
 
-        def drop() -> nn.Module:
-            return _AlwaysDrop(dropout_p) if dropout_p > 0.0 else nn.Identity()
-
         self.features = nn.Sequential(
             nn.Conv2d(in_channels, 6, kernel_size=5),
             nn.ReLU(inplace=True),
@@ -36,16 +33,21 @@ class LeNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2),
         )
-        self.classifier = nn.Sequential(
+        classifier_layers: list[nn.Module] = [
             nn.Flatten(),
             nn.Linear(16 * feature_size * feature_size, 120),
             nn.ReLU(inplace=True),
-            drop(),
+        ]
+        if dropout_p > 0.0:
+            classifier_layers.append(_AlwaysDrop(dropout_p))
+        classifier_layers += [
             nn.Linear(120, 84),
             nn.ReLU(inplace=True),
-            drop(),
-            nn.Linear(84, outclass),
-        )
+        ]
+        if dropout_p > 0.0:
+            classifier_layers.append(_AlwaysDrop(dropout_p))
+        classifier_layers.append(nn.Linear(84, outclass))
+        self.classifier = nn.Sequential(*classifier_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(self.features(x))
