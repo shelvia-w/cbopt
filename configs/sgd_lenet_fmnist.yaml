@@ -4,7 +4,7 @@ model: lenet
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/sgd/{dataset}_{model}/lr_{lr}_wd_{weight-decay}"
+traindir: "final/sgd/fmnist_lenet/lr_5e-3_wd_1e-5"
 
 train_args:
   lr: "5e-3"
@@ -21,5 +21,11 @@ train_flags: []
 seed_start: 0
 seed_end: 2
 eval_subdir: "eval"
+
+test_args:
+  tvsplit: "1.0"
+  batch: "256"
+  j: "32"
+
 test_flags:
   - pd
