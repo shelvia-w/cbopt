@@ -4,7 +4,7 @@ model: lenet
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/adamw/fmnist_lenet/lr_1e-3_wd_1e-4"
+traindir: "final/adamw/fmnist_lenet/lr_1e-3_wd_1e-2"
 
 train_args:
   lr: "1e-3"
