@@ -102,6 +102,10 @@ def resnet20_mcdrop(outclass: int, input_size: int = 32, p: float = 0.05) -> tor
     )
 
 
+def lenet_mcdrop(outclass: int, input_size: int = 28, p: float = 0.05) -> torch.nn.Module:
+    return LeNet(outclass, input_size, dropout_p=p)
+
+
 def softplus_inv(x: float) -> float:
     return x + np.log(-np.expm1(-x))
 
@@ -163,7 +167,7 @@ STANDARDMODELS = {
     "densenet121": densenet121,
     "resnet50_imagenet": resnet50_imagenet,
 }
-MCDROPMODELS = {"resnet20_mcdrop": resnet20_mcdrop}
+MCDROPMODELS = {"resnet20_mcdrop": resnet20_mcdrop, "lenet_mcdrop": lenet_mcdrop}
 BBBMODELS = {"resnet20_bbb": resnet20_bbb}
 SWAGMODELS = {"resnet20_swag": resnet20_swag}
 SNGPMODELS = {"resnet20_sngp": resnet20_sngp}

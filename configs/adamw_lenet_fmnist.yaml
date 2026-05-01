@@ -1,0 +1,32 @@
+optimizer: adamw
+dataset: fmnist
+model: lenet
+seeds: [0, 1, 2]
+device: cuda
+
+traindir: "final/adamw/fmnist_lenet/lr_1e-3_wd_1e-4_ep_100"
+
+train_args:
+  lr: "1e-3"
+  e: "100"
+  weight-decay: "1e-4"
+  beta1: "0.9"
+  beta2: "0.999"
+  tbatch: "128"
+  vbatch: "256"
+  tvsplit: "0.9"
+  j: "1"
+
+train_flags: []
+
+seed_start: 0
+seed_end: 2
+eval_subdir: "eval"
+
+test_args:
+  tvsplit: "1.0"
+  batch: "256"
+  j: "0"
+
+test_flags:
+  - pd
