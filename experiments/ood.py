@@ -78,7 +78,7 @@ def get_args():
     parser.add_argument("-sms", "--swag_modelsamples", type=int, default=1)
     parser.add_argument("-ssm", "--swag_samplemode", default="modelwise", choices=SWAG.sample_mode)
     parser.add_argument("--checkpoint", default="best", choices=("best", "latest"))
-    parser.add_argument("--pred_type", default="glm", choices=["glm", "nn", "linear_sampling", "mc"])
+    parser.add_argument("--pred_type", default="glm", choices=["glm", "nn"])
     parser.add_argument("--link_approx", default="probit", choices=["mc", "probit", "bridge", "bridge_norm"])
     parser.add_argument("--n_samples", default=100, type=int)
     return parser.parse_args()
@@ -103,9 +103,9 @@ def do_evalbatch_laplace(batchinput, la, pred_type="glm", link_approx="probit", 
     inputs = batchinput[:-1]
     x = inputs[0]
     kwargs = {"pred_type": pred_type}
-    if pred_type in {"glm", "mc"}:
+    if pred_type == "glm":
         kwargs["link_approx"] = link_approx
-    if pred_type in {"mc", "linear_sampling"}:
+    if link_approx == "mc" or pred_type == "nn":
         kwargs["n_samples"] = n_samples
     return la(x, **kwargs)
 
@@ -262,4 +262,3 @@ if __name__ == "__main__":
     summarize_csv(pjoin(args.save_dir, "metrics_test.csv"))
     print(f">>> Test completed at {next(timer)[0].isoformat()} <<<\n")
     log_ece.close()
-

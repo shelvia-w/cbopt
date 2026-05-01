@@ -53,6 +53,14 @@ CURVATURE_SWEEP = [
     "1e-4",
 ]
 
+CURVATURE_SWEEP_REFINED = [
+    "1e-8",
+    "2e-8",
+    "5e-8",
+    "2e-7",
+    "3e-7",
+]
+
 
 def run_dir(lr: str, weight_decay: str, cand_curvature: str, epochs: str = EPOCHS) -> Path:
     return (
@@ -300,6 +308,45 @@ def main() -> None:
         if not args.dry_run:
             add_row(
                 best_val_metrics(save_dir, best_lr, best_wd, cand_curvature), "curvature_sweep"
+            )
+
+    print("Stage 4: refined candidate-curvature sweep")
+    summary_csv = OUTPUT_ROOT / OPTIMIZER / f"{DATASET}_{MODEL}" / "tuning_summary.csv"
+    if args.dry_run:
+        best_lr_s4 = "<best_lr_from_summary>"
+        best_wd_s4 = "<best_wd_from_summary>"
+    elif summary_csv.exists():
+        with summary_csv.open(newline="", encoding="utf-8") as f:
+            prior_rows = list(csv.DictReader(f))
+        if not prior_rows:
+            raise RuntimeError(f"tuning_summary.csv is empty: {summary_csv}")
+        best_prior = min(prior_rows, key=lambda r: float(r["best_val_nll"]))
+        best_lr_s4 = str(best_prior["lr"])
+        best_wd_s4 = str(best_prior["weight_decay"])
+        print(f"Stage 4 best config from summary CSV: lr={best_lr_s4}, weight-decay={best_wd_s4}")
+    elif rows:
+        stage13_rows = [r for r in rows if r["stage"] in ("lr_sweep", "wd_sweep", "curvature_sweep")]
+        best_row = min(stage13_rows, key=lambda r: float(r["best_val_nll"]))
+        best_lr_s4 = str(best_row["lr"])
+        best_wd_s4 = str(best_row["weight_decay"])
+        print(f"Stage 4 best config from in-session rows: lr={best_lr_s4}, weight-decay={best_wd_s4}")
+    else:
+        raise RuntimeError(
+            f"No tuning_summary.csv found at {summary_csv} and no in-session rows. "
+            "Run stages 1-3 first."
+        )
+
+    for cand_curvature in CURVATURE_SWEEP_REFINED:
+        if not args.dry_run and float(cand_curvature) >= float(best_wd_s4):
+            print(
+                f"Skipping cand_curvature={cand_curvature} because it is >= weight_decay={best_wd_s4}"
+            )
+            continue
+        save_dir = run_training(best_lr_s4, best_wd_s4, cand_curvature, dry_run=args.dry_run)
+        if not args.dry_run:
+            add_row(
+                best_val_metrics(save_dir, best_lr_s4, best_wd_s4, cand_curvature),
+                "curvature_sweep_refined",
             )
 
     if args.dry_run:

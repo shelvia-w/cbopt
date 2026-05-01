@@ -27,12 +27,6 @@ train_args:
   tvsplit: "1.0"
   j: "0"
   tf: "0.05"
-  subset_of_weights: "last_layer"
-  hessian_structure: "diag"
-  pred_type: "glm"
-  link_approx: "probit"
-  n_samples: "64"
-  prior_precision: "10"
 train_flags:
   - rescale_lr
 
@@ -40,10 +34,7 @@ train_flags:
 seed_start: 0
 seed_end: 4
 eval_subdir: "eval"
-test_args:
-  pred_type: "glm"
-  link_approx: "probit"
-  n_samples: "64"
+test_args: {}
 test_flags:
   - pd
 

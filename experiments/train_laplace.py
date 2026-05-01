@@ -51,16 +51,17 @@ def get_args():
     # Laplace
     p.add_argument("--subset_of_weights", default="last_layer",
                    choices=["last_layer", "all", "subnetwork"])
-    p.add_argument("--hessian_structure", default="diag",
+    p.add_argument("--hessian_structure", default="kron",
                    choices=["diag", "kron", "full", "lowrank"])
     p.add_argument("--pred_type", default="glm",
-                   choices=["glm", "nn", "linear_sampling", "mc"])
+                   choices=["glm", "nn"])
     p.add_argument("--link_approx", default="probit",
                    choices=["mc", "probit", "bridge", "bridge_norm"])
     p.add_argument("--n_samples", default=100, type=int)
     p.add_argument("--prior_precision", default=1.0, type=float)
-    p.add_argument("--optimize_prior_precision", action="store_true")
-    p.add_argument("--prior_precision_method", default="gridsearch",
+    p.add_argument("--optimize_prior_precision", action=argparse.BooleanOptionalAction,
+                   default=True)
+    p.add_argument("--prior_precision_method", default="marglik",
                    choices=["gridsearch", "marglik"])
 
     args = p.parse_args()
@@ -103,9 +104,9 @@ class LaplaceEvalWrapper:
     def __call__(self, batchinput):
         images, target = batchinput
         kwargs = {"pred_type": self.pred_type}
-        if self.pred_type in {"glm", "mc"}:
+        if self.pred_type == "glm":
             kwargs["link_approx"] = self.link_approx
-        if self.pred_type in {"mc", "linear_sampling"}:
+        if self.link_approx == "mc" or self.pred_type == "nn":
             kwargs["n_samples"] = self.n_samples
         prob = self.la(images, **kwargs)
         loss = nnf.nll_loss(prob.clamp_min(1e-12).log(), target)
@@ -122,18 +123,21 @@ def fit_laplace(args, model, train_loader, val_loader):
           f"hessian={args.hessian_structure}, prior={args.prior_precision}")
     la.fit(train_loader)
 
-    if args.optimize_prior_precision and len(val_loader) > 0:
+    if args.optimize_prior_precision:
         print(f"Optimizing prior precision via {args.prior_precision_method}")
         optimize_kwargs = {
             "method": args.prior_precision_method,
             "pred_type": args.pred_type,
             "val_loader": val_loader,
         }
-        if args.pred_type in {"glm", "mc"}:
+        if args.pred_type == "glm":
             optimize_kwargs["link_approx"] = args.link_approx
-        if args.pred_type in {"mc", "linear_sampling"}:
+        if args.link_approx == "mc" or args.pred_type == "nn":
             optimize_kwargs["n_samples"] = args.n_samples
-        la.optimize_prior_precision(**optimize_kwargs)
+        if args.prior_precision_method == "gridsearch" and len(val_loader) == 0:
+            print("Skipping gridsearch prior optimization: validation loader is empty")
+        else:
+            la.optimize_prior_precision(**optimize_kwargs)
 
     prior_prec = la.prior_precision
     prior_prec_val = (float(prior_prec.detach().cpu().item())

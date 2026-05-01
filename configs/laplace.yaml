@@ -1,4 +1,4 @@
-# Laplace approximation configuration (last-layer, diagonal Hessian)
+# Laplace approximation configuration
 # Train: qsub -v CONFIG=configs/laplace.yaml pbs/train.pbs
 # Test:  qsub -v CONFIG=configs/laplace.yaml pbs/test.pbs
 
@@ -8,7 +8,7 @@ model: resnet20
 seeds: [0, 1, 2, 3, 4]
 device: cuda
 
-traindir: "laplace/cifar10_resnet20/lr_4e-1_wd_2e-4_pp_10_tf_0.2_nr_0.4"
+traindir: "laplace/cifar10_resnet20/lr_4e-1_wd_2e-4_tf_0.2_nr_0.4"
 
 # --- Training arguments ---
 train_args:
@@ -22,22 +22,13 @@ train_args:
   j: "0"
   tf: "0.2"
   nr: "0.4"
-  subset_of_weights: "last_layer"
-  hessian_structure: "diag"
-  pred_type: "glm"
-  link_approx: "probit"
-  n_samples: "64"
-  prior_precision: "10"
 train_flags: []
 
 # --- Evaluation arguments ---
 seed_start: 0
 seed_end: 4
 eval_subdir: "eval"
-test_args:
-  pred_type: "glm"
-  link_approx: "probit"
-  n_samples: "64"
+test_args: {}
 test_flags:
   - pd
 

@@ -9,7 +9,7 @@ traindir: "final/adamw/fmnist_lenet/lr_1e-3_wd_1e-4"
 train_args:
   lr: "1e-3"
   e: "100"
-  weight-decay: "1e-4"
+  weight-decay: "1e-2"
   beta1: "0.9"
   beta2: "0.999"
   tbatch: "128"
