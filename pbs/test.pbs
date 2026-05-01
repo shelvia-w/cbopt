@@ -4,7 +4,7 @@
 #
 #PBS -N cbo_test
 #PBS -P gs_spms_jeremie.houssineau
-#PBS -q gpu_h100
+#PBS -q gpu_h200_caim
 #PBS -l walltime=00:30:00
 #PBS -l select=1:ncpus=32:ngpus=1
 #PBS -j oe
