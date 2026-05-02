@@ -43,7 +43,9 @@ _test_script_map = {'duq': 'experiments.test_duq'}
 script      = to_module_name(c.get('test_script', _test_script_map.get(optimizer, 'experiments.test')))
 seed_start  = c.get('seed_start', 0)
 seed_end    = c.get('seed_end', 4)
-device      = c.get('device', 'cuda')
+if 'device' not in c:
+    raise KeyError(f"{config_file} must define device, e.g. device: cuda")
+device      = c['device']
 eval_subdir = c.get('eval_subdir', 'eval')
 
 def to_flag(key):

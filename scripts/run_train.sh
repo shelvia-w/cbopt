@@ -23,7 +23,9 @@ optimizer = c['optimizer']
 dataset   = c['dataset']
 model     = c['model']
 seeds     = c.get('seeds', [0, 1, 2, 3, 4])
-device    = c.get('device', 'cpu')
+if 'device' not in c:
+    raise KeyError(f"{config_file} must define device, e.g. device: cuda")
+device    = c['device']
 scratch   = f"/scratch/{os.environ['USER']}/cbo_results"
 traindir  = f"{scratch}/{c['traindir']}"
 
