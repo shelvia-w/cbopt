@@ -29,10 +29,10 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 ESS = "50000"
-HESS_INIT_SWEEP = ["0.1", "0.2", "0.5"]
+HESS_INIT_SWEEP = ["0.1", "0.2", "0.5", "1.0"]
 TRAIN_SAMPLES = "1"
-LR_SWEEP = ["1e-1", "5e-2", "1e-2", "5e-3"]
-WD_SWEEP = ["0", "1e-5", "1e-4", "5e-4", "1e-3"]
+LR_SWEEP = ["1e-1", "5e-2", "1e-2", "5e-3", "1e-3"]
+WD_SWEEP = ["0", "1e-5", "1e-4", "5e-4", "1e-3", "2e-3"]
 LR_SWEEP_WD = "1e-4"
 
 
