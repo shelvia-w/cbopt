@@ -1,0 +1,32 @@
+optimizer: adamw
+dataset: cifar10
+model: resnet20
+seeds: [0, 1, 2]
+device: cuda
+
+traindir: "final/adamw/cifar10_resnet20/lr_5e-5_wd_2e-4"
+
+train_args:
+  lr: "5e-5"
+  e: "200"
+  weight-decay: "2e-4"
+  beta1: "0.9"
+  beta2: "0.999"
+  tbatch: "128"
+  vbatch: "256"
+  tvsplit: "0.9"
+  j: "1"
+
+train_flags: []
+
+seed_start: 0
+seed_end: 2
+eval_subdir: "eval"
+
+test_args:
+  tvsplit: "1.0"
+  batch: "256"
+  j: "32"
+
+test_flags:
+  - pd

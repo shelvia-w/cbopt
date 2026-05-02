@@ -1,0 +1,38 @@
+optimizer: ivon
+dataset: cifar10
+model: resnet20
+seeds: [0, 1, 2]
+device: cuda
+
+traindir: "final/ivon/resnet20_cifar10/lr_3.5_wd_2e-4_h0_0.5_ess_50000"
+
+train_args:
+  lr: "3.5"
+  e: "200"
+  weight-decay: "2e-4"
+  beta1: "0.9"
+  beta2: "0.99999"
+  hess_init: "0.5"
+  hess_approx: "price"
+  ess: "50000"
+  mc_samples: "1"
+  tbatch: "128"
+  vbatch: "256"
+  tvsplit: "0.9"
+  j: "1"
+
+train_flags:
+  - rescale_lr
+
+seed_start: 0
+seed_end: 2
+eval_subdir: "eval"
+
+test_args:
+  tvsplit: "1.0"
+  batch: "256"
+  j: "0"
+  tr: "64"
+
+test_flags:
+  - pd
