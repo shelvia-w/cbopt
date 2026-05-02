@@ -1,0 +1,38 @@
+#!/bin/bash
+# Three-stage uCBOpt tuning job for LeNet on MNIST.
+# Submit from the project root directory:
+#   qsub pbs/hyperparam_tune_ucbopt_lenet_mnist.pbs
+#
+# Optional overrides:
+#   qsub -v CBO_OUTPUT_ROOT=/scratch/$USER/cbo_results/tuning_ucbopt_lenet_mnist pbs/hyperparam_tune_ucbopt_lenet_mnist.pbs
+#   qsub -v CBO_WORKERS=16 pbs/hyperparam_tune_ucbopt_lenet_mnist.pbs
+#
+#PBS -N cbo_tune_ucbopt_lenet_mnist
+#PBS -P gs_spms_jeremie.houssineau
+#PBS -q gpu_h200_caim
+#PBS -l walltime=120:00:00
+#PBS -l select=1:ncpus=32:ngpus=1
+#PBS -j oe
+
+set -euo pipefail
+
+LOG_DIR=/scratch/$USER/pbs_logs
+mkdir -p "$LOG_DIR"
+exec >"$LOG_DIR/${PBS_JOBNAME}.o${PBS_JOBID}" 2>"$LOG_DIR/${PBS_JOBNAME}.e${PBS_JOBID}"
+
+cd "$PBS_O_WORKDIR"
+export QT_XCB_GL_INTEGRATION=none
+
+set +u
+module load anaconda2025
+eval "$(/usr/local/anaconda2025/bin/conda shell.bash hook)"
+conda activate cbo
+set -u
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+
+export CBO_OUTPUT_ROOT="${CBO_OUTPUT_ROOT:-/scratch/$USER/cbo_results/tuning}"
+export CBO_DATA_DIR="${CBO_DATA_DIR:-/scratch/$USER/cbo_results/data}"
+export CBO_WORKERS="${CBO_WORKERS:-32}"
+export CBO_DEVICE="${CBO_DEVICE:-cuda}"
+
+python -u "$PBS_O_WORKDIR/scripts/hyperparam_tune_ucbopt_lenet_mnist.py"

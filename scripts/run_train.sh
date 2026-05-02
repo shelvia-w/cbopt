@@ -71,26 +71,19 @@ for key, val in c.get('train_args', {}).items():
 for flag in c.get('train_flags', []):
     extra.append(to_flag(flag))
 
-procs = []
+failed = []
 for seed in seeds:
     timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     savedir = f"{traindir}/seed={seed}/{timestamp}"
     os.makedirs(savedir, exist_ok=True)
     cmd = ['python', '-u', '-m', script, model, dataset,
            '-s', str(seed), '-dd', datadir, '-sd', savedir] + extra
-    log = open(f"{savedir}/stdout.log", 'w')
-    p = subprocess.Popen(cmd, cwd=code_base, stdout=log, stderr=log)
-    print(f"Started seed={seed} (PID: {p.pid}) -> {savedir}", flush=True)
-    procs.append((seed, p, log))
-
-print(f"Waiting for {len(procs)} seed(s)...", flush=True)
-failed = []
-for seed, p, log in procs:
-    p.wait()
-    log.close()
-    status = "OK" if p.returncode == 0 else f"FAILED (exit={p.returncode})"
+    print(f"Running seed={seed} -> {savedir}", flush=True)
+    with open(f"{savedir}/stdout.log", 'w') as log:
+        ret = subprocess.run(cmd, cwd=code_base, stdout=log, stderr=log).returncode
+    status = "OK" if ret == 0 else f"FAILED (exit={ret})"
     print(f"  seed={seed}: {status}", flush=True)
-    if p.returncode != 0:
+    if ret != 0:
         failed.append(seed)
 
 if failed:
