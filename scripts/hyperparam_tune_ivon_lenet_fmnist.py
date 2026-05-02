@@ -1,4 +1,8 @@
-"""HPC two-stage IVON tuning sweep for LeNet on Fashion-MNIST."""
+"""HPC two-stage IVON tuning sweep for LeNet on Fashion-MNIST.
+
+Both stages are run for every value in HESS_INIT_SWEEP; the overall best
+across all h0 values determines the recommended final config.
+"""
 
 from __future__ import annotations
 
@@ -25,19 +29,19 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 ESS = "50000"
-HESS_INIT = "1.0"
+HESS_INIT_SWEEP = ["0.1", "0.2", "0.5"]
 TRAIN_SAMPLES = "1"
 LR_SWEEP = ["1e-1", "5e-2", "1e-2", "5e-3"]
 WD_SWEEP = ["0", "1e-5", "1e-4", "5e-4", "1e-3"]
 LR_SWEEP_WD = "1e-4"
 
 
-def run_dir(lr: str, weight_decay: str, epochs: str = EPOCHS) -> Path:
+def run_dir(lr: str, weight_decay: str, hess_init: str, epochs: str = EPOCHS) -> Path:
     return (
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{lr}_wd_{weight_decay}_ess_{ESS}_hi_{HESS_INIT}_ep_{epochs}"
+        / f"lr_{lr}_wd_{weight_decay}_ess_{ESS}_h0_{hess_init}_ep_{epochs}"
     )
 
 
@@ -52,7 +56,7 @@ def completed_val_csv(val_csv: Path, epochs: str = EPOCHS) -> bool:
         return False
 
 
-def train_command(lr: str, weight_decay: str, save_dir: Path) -> list[str]:
+def train_command(lr: str, weight_decay: str, hess_init: str, save_dir: Path) -> list[str]:
     return [
         sys.executable,
         "-u",
@@ -75,7 +79,7 @@ def train_command(lr: str, weight_decay: str, save_dir: Path) -> list[str]:
         "--ess",
         ESS,
         "--hess_init",
-        HESS_INIT,
+        hess_init,
         "--mc_samples",
         TRAIN_SAMPLES,
         "-e",
@@ -91,11 +95,11 @@ def train_command(lr: str, weight_decay: str, save_dir: Path) -> list[str]:
     ]
 
 
-def run_training(lr: str, weight_decay: str, dry_run: bool = False) -> Path:
-    save_dir = run_dir(lr, weight_decay)
+def run_training(lr: str, weight_decay: str, hess_init: str, dry_run: bool = False) -> Path:
+    save_dir = run_dir(lr, weight_decay, hess_init)
     val_csv = save_dir / "val.csv"
 
-    cmd = train_command(lr, weight_decay, save_dir)
+    cmd = train_command(lr, weight_decay, hess_init, save_dir)
     if dry_run:
         print(" ".join(cmd))
         return save_dir
@@ -107,7 +111,7 @@ def run_training(lr: str, weight_decay: str, dry_run: bool = False) -> Path:
         print(f"Skipping completed run: {save_dir}")
         return save_dir
 
-    print(f"Running lr={lr}, weight-decay={weight_decay}")
+    print(f"Running lr={lr}, weight-decay={weight_decay}, hess_init={hess_init}")
     with (save_dir / "stdout.log").open("w", encoding="utf-8") as log:
         result = subprocess.run(
             cmd,
@@ -119,13 +123,13 @@ def run_training(lr: str, weight_decay: str, dry_run: bool = False) -> Path:
         )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Training failed for lr={lr}, weight-decay={weight_decay}. "
+            f"Training failed for lr={lr}, weight-decay={weight_decay}, hess_init={hess_init}. "
             f"See {save_dir / 'stdout.log'}"
         )
     return save_dir
 
 
-def best_val_metrics(save_dir: Path, lr: str, weight_decay: str) -> dict[str, str | float | int]:
+def best_val_metrics(save_dir: Path, lr: str, weight_decay: str, hess_init: str) -> dict[str, str | float | int]:
     val_csv = save_dir / "val.csv"
     if not val_csv.exists():
         raise FileNotFoundError(f"Missing validation metrics: {val_csv}")
@@ -139,6 +143,7 @@ def best_val_metrics(save_dir: Path, lr: str, weight_decay: str) -> dict[str, st
     return {
         "lr": lr,
         "weight_decay": weight_decay,
+        "hess_init": hess_init,
         "best_val_nll": float(best["nll"]),
         "best_val_accuracy": float(best["acc"]),
         "best_val_ece": float(best["ece"]),
@@ -148,13 +153,13 @@ def best_val_metrics(save_dir: Path, lr: str, weight_decay: str) -> dict[str, st
 
 
 def markdown_table(rows: list[dict[str, str | float | int]]) -> str:
-    header = "| lr | weight-decay | best val NLL | best val accuracy | best val ECE | epoch of best val NLL |"
-    divider = "|---|---:|---:|---:|---:|---:|"
+    header = "| lr | weight-decay | h0 | best val NLL | best val accuracy | best val ECE | epoch of best val NLL | stage |"
+    divider = "|---|---:|---:|---:|---:|---:|---:|---|"
     lines = [header, divider]
     for row in rows:
         lines.append(
-            "| {lr} | {weight_decay} | {best_val_nll:.6f} | "
-            "{best_val_accuracy:.6f} | {best_val_ece:.6f} | {epoch} |".format(**row)
+            "| {lr} | {weight_decay} | {hess_init} | {best_val_nll:.6f} | "
+            "{best_val_accuracy:.6f} | {best_val_ece:.6f} | {epoch} | {stage} |".format(**row)
         )
     return "\n".join(lines)
 
@@ -169,11 +174,13 @@ def write_summary(rows: list[dict[str, str | float | int]], best: dict[str, str 
             fieldnames=[
                 "lr",
                 "weight_decay",
+                "hess_init",
                 "best_val_nll",
                 "best_val_accuracy",
                 "best_val_ece",
                 "epoch",
                 "save_dir",
+                "stage",
             ],
         )
         writer.writeheader()
@@ -186,13 +193,13 @@ def write_summary(rows: list[dict[str, str | float | int]], best: dict[str, str 
         "seeds: [0, 1, 2]\n"
         f"device: {DEVICE}\n"
         f"traindir: \"runs/final/ivon/{DATASET}_{MODEL}/"
-        f"lr_{best['lr']}_wd_{best['weight_decay']}_ess_50000_hi_1.0_ep_100\"\n"
+        f"lr_{best['lr']}_wd_{best['weight_decay']}_ess_{ESS}_h0_{best['hess_init']}_ep_100\"\n"
         "train_args:\n"
         f"  lr: \"{best['lr']}\"\n"
         "  e: \"100\"\n"
         f"  weight-decay: \"{best['weight_decay']}\"\n"
-        "  ess: \"50000\"\n"
-        "  hess_init: \"1.0\"\n"
+        f"  ess: \"{ESS}\"\n"
+        f"  hess_init: \"{best['hess_init']}\"\n"
         "  mc_samples: \"1\"\n"
         "  tbatch: \"128\"\n"
         "  vbatch: \"256\"\n"
@@ -209,49 +216,58 @@ def main() -> None:
     args = parser.parse_args()
 
     rows: list[dict[str, str | float | int]] = []
+    seen: set[tuple[str, str, str]] = set()
 
-    print("Step 1: learning-rate sweep")
-    for lr in LR_SWEEP:
-        save_dir = run_training(lr, LR_SWEEP_WD, dry_run=args.dry_run)
-        if not args.dry_run:
-            rows.append(best_val_metrics(save_dir, lr, LR_SWEEP_WD))
+    def add_row(row: dict[str, str | float | int], stage: str) -> None:
+        key = (str(row["hess_init"]), str(row["lr"]), str(row["weight_decay"]))
+        if key not in seen:
+            seen.add(key)
+            rows.append({**row, "stage": stage})
 
-    if args.dry_run:
-        best_lr = "<best_lr_from_step_1>"
-    else:
-        best_lr = str(min(rows, key=lambda row: float(row["best_val_nll"]))["lr"])
-        print(f"Best learning rate from step 1: {best_lr}")
+    for hess_init in HESS_INIT_SWEEP:
+        print(f"\n=== hess_init={hess_init} ===")
 
-    print("Step 2: weight-decay sweep")
-    for weight_decay in WD_SWEEP:
-        save_dir = run_training(best_lr, weight_decay, dry_run=args.dry_run)
-        if not args.dry_run:
-            row = best_val_metrics(save_dir, best_lr, weight_decay)
-            if not any(r["lr"] == row["lr"] and r["weight_decay"] == row["weight_decay"] for r in rows):
-                rows.append(row)
+        print("Step 1: learning-rate sweep")
+        for lr in LR_SWEEP:
+            save_dir = run_training(lr, LR_SWEEP_WD, hess_init, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, lr, LR_SWEEP_WD, hess_init), "lr_sweep")
+
+        if args.dry_run:
+            best_lr = "<best_lr_from_step_1>"
+        else:
+            h0_rows = [r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] == "lr_sweep"]
+            best_lr = str(min(h0_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
+            print(f"Best learning rate from step 1 (h0={hess_init}): {best_lr}")
+
+        print("Step 2: weight-decay sweep")
+        for weight_decay in WD_SWEEP:
+            save_dir = run_training(best_lr, weight_decay, hess_init, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, best_lr, weight_decay, hess_init), "wd_sweep")
 
     if args.dry_run:
         return
 
-    rows = sorted(rows, key=lambda row: (str(row["lr"]), str(row["weight_decay"])))
-    best = min(rows, key=lambda row: float(row["best_val_nll"]))
+    rows = sorted(rows, key=lambda r: (str(r["hess_init"]), str(r["lr"]), str(r["weight_decay"])))
+    best = min(rows, key=lambda r: float(r["best_val_nll"]))
     write_summary(rows, best)
 
     print("\nValidation summary")
     print(markdown_table(rows))
     print("\nSelected best config by validation NLL:")
-    print(f"lr={best['lr']}, weight-decay={best['weight_decay']}")
+    print(f"lr={best['lr']}, weight-decay={best['weight_decay']}, hess_init={best['hess_init']}")
     print("\nRecommended final IVON run config:")
     print(f"lr: {best['lr']}")
     print(f"weight-decay: {best['weight_decay']}")
     print(f"ess: {ESS}")
-    print(f"hess_init: {HESS_INIT}")
+    print(f"hess_init: {best['hess_init']}")
     print(f"mc_samples: {TRAIN_SAMPLES}")
     print("epochs: 100")
     print("seeds: [0, 1, 2]")
     print(
         "final output directory pattern: "
-        f"runs/final/ivon/{DATASET}_{MODEL}/lr_{best['lr']}_wd_{best['weight_decay']}_ess_50000_hi_1.0_ep_100"
+        f"runs/final/ivon/{DATASET}_{MODEL}/lr_{best['lr']}_wd_{best['weight_decay']}_ess_{ESS}_h0_{best['hess_init']}_ep_100"
     )
 
 
