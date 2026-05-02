@@ -84,11 +84,13 @@ def do_evalbatch_ivon(batchinput, model, optimizer, repeat: int = 1):
     inputs, gt = batchinput[:-1], batchinput[-1]
     repeat = max(1, repeat)
     cumprob = torch.zeros([], device=inputs[0].device, dtype=inputs[0].dtype)
+    cumloss = 0.0
     for _ in range(repeat):
         with optimizer.sampled_params():
             output = model(*inputs)
         cumprob = cumprob + nnf.softmax(output, 1) / repeat
-    return cumprob, gt, _nll_from_prob(cumprob, gt)
+        cumloss += nnf.nll_loss(nnf.log_softmax(output, 1), gt).item() / repeat
+    return cumprob, gt, cumloss
 
 
 @torch.no_grad()
