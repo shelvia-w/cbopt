@@ -34,10 +34,35 @@ def savemodel(
     torch.save(dic, to)
 
 
+_LENET_IDENTITY_ERA_REMAP = {
+    # Checkpoints saved when nn.Identity() was always inserted into the classifier
+    # had linear-layer keys at .4 and .7; current layout (no-op dropout omitted) uses .3 and .5.
+    "classifier.4.": "classifier.3.",
+    "classifier.7.": "classifier.5.",
+}
+
+
+def _coerce_state_dict(state_dict: dict, model: nn.Module) -> dict:
+    model_keys = set(model.state_dict().keys())
+    if set(state_dict.keys()) == model_keys:
+        return state_dict
+    remapped = {}
+    for k, v in state_dict.items():
+        new_k = k
+        for old, new in _LENET_IDENTITY_ERA_REMAP.items():
+            if k.startswith(old):
+                new_k = new + k[len(old):]
+                break
+        remapped[new_k] = v
+    if set(remapped.keys()) == model_keys:
+        return remapped
+    return state_dict
+
+
 def loadmodel(fromfile, device=torch.device("cpu")):
     dic = torch.load(fromfile, map_location=device)
     model = globals()[dic["modelname"]](*dic["modelargs"], **dic.get("modelkwargs", {})).to(device)
-    model.load_state_dict(dic.pop("modelstates"))
+    model.load_state_dict(_coerce_state_dict(dic.pop("modelstates"), model))
     return model, dic
 
 

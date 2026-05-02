@@ -54,6 +54,9 @@ def get_args():
     p.add_argument("--hess_init", default=0.5, type=float)
     p.add_argument("--gamma", default=0.1, type=float, help="adaptive curvature weight")
     p.add_argument("--eps", default=1e-8, type=float)
+    p.add_argument("--rescale_lr", action="store_true", default=True,
+                   help="scale lr by (hess_init + weight_decay) as in uCBOpt")
+    p.add_argument("--no-rescale_lr", dest="rescale_lr", action="store_false")
     p.add_argument("--clip-radius", default=float("inf"), type=float,
                    help="elementwise update clipping radius (inf = disabled)")
     p.add_argument("--bias-corr", action="store_true", default=True,
@@ -75,6 +78,7 @@ def build_optimizer(args, model):
         hess_init=args.hess_init,
         gamma=args.gamma,
         eps=args.eps,
+        rescale_lr=args.rescale_lr,
         clip_radius=args.clip_radius,
         bias_corr=args.bias_corr,
         decoupled_wd=args.decoupled_wd,
