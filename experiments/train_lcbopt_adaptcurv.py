@@ -220,13 +220,12 @@ if __name__ == "__main__":
         with open(pjoin(args.save_dir, "time.csv"), "a+") as file:
             file.write("%d,%f\n" % (e, time_per_epoch.total_seconds()))
 
-        log_ece.send((e, "test", len(test_loader), None))
-        with torch.no_grad():
-            model.eval()
-            do_epoch(test_loader, do_evalbatch, log_ece, device, model=model)
-        log_ece.throw(StopIteration)
-
         if not has_validation:
+            log_ece.send((e, "test", len(test_loader), None))
+            with torch.no_grad():
+                model.eval()
+                do_epoch(test_loader, do_evalbatch, log_ece, device, model=model)
+            log_ece.throw(StopIteration)
             continue
 
         log_ece.send((e, "val", len(val_loader), None))

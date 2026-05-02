@@ -23,6 +23,7 @@ optimizer = c['optimizer']
 dataset   = c['dataset']
 model     = c['model']
 seeds     = c.get('seeds', [0, 1, 2, 3, 4])
+device    = c.get('device', 'cpu')
 scratch   = f"/scratch/{os.environ['USER']}/cbo_results"
 traindir  = f"{scratch}/{c['traindir']}"
 
@@ -71,16 +72,22 @@ for key, val in c.get('train_args', {}).items():
 for flag in c.get('train_flags', []):
     extra.append(to_flag(flag))
 
-failed = []
+timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+procs = []
 for seed in seeds:
-    timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     savedir = f"{traindir}/seed={seed}/{timestamp}"
     os.makedirs(savedir, exist_ok=True)
     cmd = ['python', '-u', '-m', script, model, dataset,
-           '-s', str(seed), '-dd', datadir, '-sd', savedir] + extra
-    print(f"Running seed={seed} -> {savedir}", flush=True)
-    with open(f"{savedir}/stdout.log", 'w') as log:
-        ret = subprocess.run(cmd, cwd=code_base, stdout=log, stderr=log).returncode
+           '-s', str(seed), '-d', device, '-dd', datadir, '-sd', savedir] + extra
+    print(f"Launching seed={seed} -> {savedir}", flush=True)
+    log = open(f"{savedir}/stdout.log", 'w')
+    proc = subprocess.Popen(cmd, cwd=code_base, stdout=log, stderr=log)
+    procs.append((seed, proc, log))
+
+failed = []
+for seed, proc, log in procs:
+    ret = proc.wait()
+    log.close()
     status = "OK" if ret == 0 else f"FAILED (exit={ret})"
     print(f"  seed={seed}: {status}", flush=True)
     if ret != 0:

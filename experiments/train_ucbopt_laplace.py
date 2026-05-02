@@ -268,13 +268,13 @@ if __name__ == "__main__":
         with open(pjoin(args.save_dir, "time.csv"), "a+") as file:
             file.write("%d,%f\n" % (e, time_per_epoch.total_seconds()))
 
-        log_map.send((e, "test", len(test_loader), None))
-        with torch.no_grad():
-            model.eval()
-            do_epoch(test_loader, do_evalbatch, log_map, device, model=model)
-        log_map.throw(StopIteration)
-
-        if len(val_loader) > 0:
+        if len(val_loader) == 0:
+            log_map.send((e, "test", len(test_loader), None))
+            with torch.no_grad():
+                model.eval()
+                do_epoch(test_loader, do_evalbatch, log_map, device, model=model)
+            log_map.throw(StopIteration)
+        else:
             log_map.send((e, "val", len(val_loader), None))
             with torch.no_grad():
                 model.eval()
@@ -293,12 +293,12 @@ if __name__ == "__main__":
                                       link_approx=args.link_approx,
                                       n_samples=args.n_samples)
 
-    log_la.send((args.epochs, "test_laplace", len(test_loader), None))
-    with torch.no_grad():
-        do_epoch(test_loader, eval_laplace, log_la, device)
-    log_la.throw(StopIteration)
-
-    if len(val_loader) > 0:
+    if len(val_loader) == 0:
+        log_la.send((args.epochs, "test_laplace", len(test_loader), None))
+        with torch.no_grad():
+            do_epoch(test_loader, eval_laplace, log_la, device)
+        log_la.throw(StopIteration)
+    else:
         log_la.send((args.epochs, "val_laplace", len(val_loader), None))
         with torch.no_grad():
             do_epoch(val_loader, eval_laplace, log_la, device)
