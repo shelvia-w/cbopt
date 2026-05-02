@@ -305,6 +305,19 @@ if __name__ == "__main__":
 
         print(f">>> Time elapsed: {next(timer)[1]} <<<\n")
 
+    # For SWAG, best_checkpoint.pt must reflect the final collected statistics,
+    # not the epoch with the lowest base-model val_loss (which is typically before
+    # swag_start, where n_models=0 and all statistics are zero).
+    if args.optimizer == "swag":
+        swag_best_path = pjoin(args.save_dir, "best_checkpoint.pt")
+        savecheckpoint(
+            swag_best_path,
+            args.arch, modelargs, modelkwargs, model, optimizer, scheduler,
+            epoch=args.epochs - 1,
+        )
+        print(f"SWAG: saved final checkpoint as best_checkpoint.pt "
+              f"(n_models={model.n_models.item()})")
+
     log_ece.close()
     print(f">>> Training completed at {next(timer)[0].isoformat()} <<<\n")
 

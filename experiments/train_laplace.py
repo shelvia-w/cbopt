@@ -1,5 +1,6 @@
 ﻿"""Train with SGD (MAP) then fit a post-hoc Laplace approximation."""
 import argparse
+import math
 import os
 import sys
 from os.path import join as pjoin
@@ -232,6 +233,15 @@ if __name__ == "__main__":
 
     log_map = coro_log_timed(sw, args.printfreq, args.bins, args.save_dir)
     checkpoint_epochs = [0, 1, 2, 5, 10, 20, 30, 40, 50, 75, 100, 150, 200]
+    has_validation = len(val_loader) > 0
+    if has_validation:
+        best_val_metric = float("inf")
+        best_val_epoch = None
+        best_checkpoint_path = pjoin(args.save_dir, "best_checkpoint.pt")
+        if os.path.exists(best_checkpoint_path):
+            _, _, _, _, best_checkpoint_meta = loadcheckpoint(best_checkpoint_path, device)
+            best_val_metric = best_checkpoint_meta.get("best_val_metric", best_val_metric)
+            best_val_epoch = best_checkpoint_meta.get("best_val_epoch", best_val_epoch)
 
     for e in range(startepoch, args.epochs):
         if args.warmup > 0 and e == args.warmup:
@@ -271,12 +281,29 @@ if __name__ == "__main__":
             do_epoch(test_loader, do_evalbatch, log_map, device, model=model)
         log_map.throw(StopIteration)
 
-        if len(val_loader) > 0:
+        if has_validation:
             log_map.send((e, "val", len(val_loader), None))
             with torch.no_grad():
                 model.eval()
                 do_epoch(val_loader, do_evalbatch, log_map, device, model=model)
-            log_map.throw(StopIteration)
+            val_metrics = log_map.throw(StopIteration)
+
+            _, val_loss, *_ = val_metrics
+            if math.isfinite(val_loss) and val_loss < best_val_metric:
+                best_val_metric = val_loss
+                best_val_epoch = e
+                savecheckpoint(
+                    best_checkpoint_path,
+                    args.arch, modelargs, modelkwargs, model, optimizer, scheduler,
+                    epoch=e,
+                    best_val_metric_name="val_loss",
+                    best_val_metric=best_val_metric,
+                    best_val_epoch=best_val_epoch,
+                )
+                print(
+                    f"New best checkpoint saved at epoch {e} "
+                    f"with val_loss={best_val_metric:.4f}"
+                )
 
         print(f">>> Time elapsed: {next(timer)[1]} <<<\n")
 
