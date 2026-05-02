@@ -1,8 +1,28 @@
-"""uCBOpt Adaptive Curvature optimizer.
+"""uCBOpt Lower Adaptive Curvature optimizer.
 
-Extends uCBOpt by replacing the fixed scalar curvature with a per-element
-adaptive curvature proxy derived from a decayed running minimum of the
-squared-gradient EMA (exp_avg_sq).
+Lower-CBO variant with decayed running maximum curvature tracking.
+
+The candidate precision Lambda_t is built from C_t, a decayed running maximum
+of the squared-gradient EMA (exp_avg_sq), so that Lambda_t tracks an upper
+envelope of the Hessian proxy:
+
+    H_t = exp_avg_sq          (EMA of squared gradients)
+    C_t = max(beta3 * C_{t-1}, H_t)   (decayed running max)
+
+    Lambda_t = (1 + gamma) * C_t + Lambda_0 + eps
+
+    denom = Lambda_t - H_t - Lambda_0
+          = (1 + gamma) * C_t - H_t + eps
+
+Because C_t >= H_t (the running max is never below the current value),
+denom >= gamma * H_t + eps > 0, so it is always positive.
+
+This intentionally differs from uCBOptAdaptCurv (upper-CBO), which uses:
+
+    denom = H_t - gamma * C_t + weight_decay
+
+where C_t is a decayed running *minimum*.  Here the roles are reversed:
+C_t is a running *maximum* and the sign in the denominator is flipped.
 """
 
 from __future__ import annotations
@@ -16,42 +36,40 @@ from torch import Tensor
 ClosureType = Callable[[], Tensor]
 
 
-class uCBOptAdaptCurv(torch.optim.Optimizer):
-    """uCBOpt with an adaptive diagonal curvature proxy.
+class lCBOptAdaptCurv(torch.optim.Optimizer):
+    """Lower-CBO optimizer with decayed running maximum curvature tracking.
 
     State per parameter tensor:
-        step           -- update count
-        exp_avg        -- EMA of gradients (m_t)
-        exp_avg_sq     -- EMA of squared gradients (h_t), init to hess_init
-        min_exp_avg_sq -- decayed running minimum of exp_avg_sq (c_t), init to +inf
+        step            -- update count
+        exp_avg         -- EMA of gradients (m_t)
+        exp_avg_sq      -- EMA of squared gradients (h_t), init to hess_init
+        max_exp_avg_sq  -- decayed running max of exp_avg_sq (c_t), init to hess_init
 
     Update rules:
-        h_t = beta2 * h_{t-1} + (1 - beta2) * g_t^2          (not bias-corrected)
-        m_t = beta1 * m_{t-1} + (1 - beta1) * g_t             (bias-corrected)
-        c_t = min(beta3 * c_{t-1}, h_t)
-        denom = h_t - gamma * c_t + weight_decay
-        numer = m_t + weight_decay * param
-        lr_eff = lr * (hess_init + weight_decay)  if rescale_lr else lr
-        param -= lr_eff * numer / denom
+        h_t    = beta2 * h_{t-1} + (1 - beta2) * g_t^2
+        c_t    = max(beta3 * c_{t-1}, h_t)
+        m_t    = beta1 * m_{t-1} + (1 - beta1) * g_t
+        m_hat  = m_t / (1 - beta1^t)        [bias-corrected]
+        denom  = (1 + gamma) * c_t - h_t + eps   [lower-CBO, always > 0]
+        numer  = m_hat + weight_decay * param
+        update = numer / denom
+        param -= lr_eff * update
 
-    When gamma=0 and rescale_lr=True, this reduces to original uCBOpt
-    (given the same lr, beta1, beta2, hess_init, weight_decay).
-    rescale_lr=True uses the same scalar LR rescaling as uCBOpt; the per-element
-    adaptive curvature term (gamma * c_t) is not included in the scalar rescale.
+    lr_eff = lr * (hess_init + weight_decay) if rescale_lr else lr
     """
 
     def __init__(
         self,
         params,
-        lr: float = 0.01,
-        betas: tuple[float, float, float] = (0.9, 0.999, 0.999),
+        lr: float = 1e-3,
+        betas: tuple[float, float, float] = (0.9, 0.99999, 0.999),
         weight_decay: float = 1e-4,
-        hess_init: float = 0.5,
+        hess_init: float = 1.0,
         gamma: float = 0.1,
-        eps: float = 1e-8,
+        eps: float = 1e-6,
         maximize: bool = False,
-        clip_radius: float = float("inf"),
-        rescale_lr: bool = True,
+        clip_radius: float = 1.0,
+        rescale_lr: bool = False,
     ):
         if lr < 0.0:
             raise ValueError(f"lr must be >= 0, got {lr}")
@@ -66,10 +84,12 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             raise ValueError(f"hess_init must be > 0, got {hess_init}")
         if weight_decay < 0.0:
             raise ValueError(f"weight_decay must be >= 0, got {weight_decay}")
-        if gamma < 0.0:
-            raise ValueError(f"gamma must be >= 0, got {gamma}")
+        if gamma <= 0.0:
+            raise ValueError(f"gamma must be > 0, got {gamma}")
         if eps <= 0.0:
             raise ValueError(f"eps must be > 0, got {eps}")
+        if not (math.isinf(clip_radius) or clip_radius >= 0.0):
+            raise ValueError(f"clip_radius must be >= 0 or inf, got {clip_radius}")
         if not isinstance(rescale_lr, bool):
             raise TypeError(f"rescale_lr must be bool, got {type(rescale_lr).__name__}")
 
@@ -109,14 +129,16 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             grads: list[Tensor] = []
             exp_avgs: list[Tensor] = []
             exp_avg_sqs: list[Tensor] = []
-            min_exp_avg_sqs: list[Tensor] = []
+            max_exp_avg_sqs: list[Tensor] = []
             step_counts: list[int] = []
 
             for p in group["params"]:
                 if p is None or p.grad is None:
                     continue
                 if p.grad.is_sparse:
-                    raise RuntimeError("uCBOptAdaptCurv does not support sparse gradients.")
+                    raise RuntimeError(
+                        "uCBOptLowerAdaptCurv does not support sparse gradients."
+                    )
 
                 params_with_grad.append(p)
                 grads.append(p.grad if not maximize else p.grad.neg())
@@ -126,14 +148,14 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
                     state["step"] = 0
                     state["exp_avg"] = torch.zeros_like(p)
                     state["exp_avg_sq"] = torch.full_like(p, float(hess_init))
-                    # decayed running minimum of exp_avg_sq; tracks adaptive curvature
-                    state["min_exp_avg_sq"] = torch.full_like(p, float("inf"))
+                    # running max of exp_avg_sq; tracks upper envelope of curvature
+                    state["max_exp_avg_sq"] = torch.full_like(p, float(hess_init))
 
                 state["step"] += 1
                 step_counts.append(state["step"])
                 exp_avgs.append(state["exp_avg"])
                 exp_avg_sqs.append(state["exp_avg_sq"])
-                min_exp_avg_sqs.append(state["min_exp_avg_sq"])
+                max_exp_avg_sqs.append(state["max_exp_avg_sq"])
 
             if not params_with_grad:
                 continue
@@ -143,27 +165,31 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             torch._foreach_mul_(exp_avg_sqs, beta2)
             torch._foreach_add_(exp_avg_sqs, grad_sq, alpha=1.0 - beta2)
 
+            # c_t = max(beta3 * c_{t-1}, h_t)  — decayed running maximum
+            torch._foreach_mul_(max_exp_avg_sqs, beta3)
+            for c, h in zip(max_exp_avg_sqs, exp_avg_sqs):
+                torch.maximum(c, h, out=c)
+
             # m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
             torch._foreach_mul_(exp_avgs, beta1)
             torch._foreach_add_(exp_avgs, grads, alpha=1.0 - beta1)
 
-            # c_t = min(beta3 * c_{t-1}, h_t)  — decayed running minimum
-            torch._foreach_mul_(min_exp_avg_sqs, beta3)
-            for c, h in zip(min_exp_avg_sqs, exp_avg_sqs):
-                torch.minimum(c, h, out=c)
-
             # bias-correct m only; h is not bias-corrected
             bc_m = [1.0 - beta1 ** t for t in step_counts]
             m_hat = torch._foreach_div(exp_avgs, bc_m)
-            h_hat = list(exp_avg_sqs)
 
-            # denom = h_t - gamma * c_t + weight_decay
-            denom = torch._foreach_add(h_hat, min_exp_avg_sqs, alpha=-gamma)
-            torch._foreach_add_(denom, wd)
+            # Lower-CBO denominator:
+            #   H_t = exp_avg_sq,  C_t = max_exp_avg_sq
+            #   Lambda_t = (1 + gamma) * C_t + Lambda_0 + eps
+            #   denom = Lambda_t - H_t - Lambda_0
+            #         = (1 + gamma) * C_t - H_t + eps
+            # C_t >= H_t by construction, so denom >= gamma * H_t + eps > 0.
+            denom = torch._foreach_mul(max_exp_avg_sqs, 1.0 + gamma)
+            torch._foreach_add_(denom, exp_avg_sqs, alpha=-1.0)
+            torch._foreach_add_(denom, eps)
             torch._foreach_clamp_min_(denom, eps)
 
-            # Coupled weight decay: matches original uCBOpt when gamma=0
-            # and the same beta1, beta2, hess_init, lr, and weight_decay are used.
+            # Coupled weight decay: numer = m_hat + weight_decay * param
             numer = torch._foreach_add(m_hat, params_with_grad, alpha=wd)
 
             update = torch._foreach_div(numer, denom)
