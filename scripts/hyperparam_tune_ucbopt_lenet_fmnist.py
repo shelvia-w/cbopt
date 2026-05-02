@@ -4,6 +4,10 @@ Stages:
   1. Learning-rate sweep  (fixed wd=1e-4, cand_curvature=0.0)
   2. Weight-decay sweep   (fixed best lr, cand_curvature=0.0)
   3. Curvature sweep      (fixed best lr and best wd)
+  4. Refined curvature sweep
+
+All stages are run for every value in HESS_INIT_SWEEP; the overall best
+across all h0 values determines the recommended final config.
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 
-HESS_INIT = "0.5"
+HESS_INIT_SWEEP = ["0.5", "1.0"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
 
@@ -62,12 +66,12 @@ CURVATURE_SWEEP_REFINED = [
 ]
 
 
-def run_dir(lr: str, weight_decay: str, cand_curvature: str, epochs: str = EPOCHS) -> Path:
+def run_dir(lr: str, weight_decay: str, hess_init: str, cand_curvature: str, epochs: str = EPOCHS) -> Path:
     return (
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{lr}_wd_{weight_decay}_hi_{HESS_INIT}_curv_{cand_curvature}_ep_{epochs}"
+        / f"lr_{lr}_wd_{weight_decay}_h0_{hess_init}_curv_{cand_curvature}_ep_{epochs}"
     )
 
 
@@ -82,7 +86,7 @@ def completed_val_csv(val_csv: Path, epochs: str = EPOCHS) -> bool:
         return False
 
 
-def train_command(lr: str, weight_decay: str, cand_curvature: str, save_dir: Path) -> list[str]:
+def train_command(lr: str, weight_decay: str, hess_init: str, cand_curvature: str, save_dir: Path) -> list[str]:
     return [
         sys.executable,
         "-u",
@@ -103,7 +107,7 @@ def train_command(lr: str, weight_decay: str, cand_curvature: str, save_dir: Pat
         "--wd",
         weight_decay,
         "--hess_init",
-        HESS_INIT,
+        hess_init,
         "--cand_curvature",
         cand_curvature,
         "--beta1",
@@ -123,11 +127,11 @@ def train_command(lr: str, weight_decay: str, cand_curvature: str, save_dir: Pat
     ]
 
 
-def run_training(lr: str, weight_decay: str, cand_curvature: str, dry_run: bool = False) -> Path:
-    save_dir = run_dir(lr, weight_decay, cand_curvature)
+def run_training(lr: str, weight_decay: str, hess_init: str, cand_curvature: str, dry_run: bool = False) -> Path:
+    save_dir = run_dir(lr, weight_decay, hess_init, cand_curvature)
     val_csv = save_dir / "val.csv"
 
-    cmd = train_command(lr, weight_decay, cand_curvature, save_dir)
+    cmd = train_command(lr, weight_decay, hess_init, cand_curvature, save_dir)
     if dry_run:
         print(" ".join(cmd))
         return save_dir
@@ -139,7 +143,7 @@ def run_training(lr: str, weight_decay: str, cand_curvature: str, dry_run: bool 
         print(f"Skipping completed run: {save_dir}")
         return save_dir
 
-    print(f"Running lr={lr}, weight-decay={weight_decay}, cand_curvature={cand_curvature}")
+    print(f"Running lr={lr}, weight-decay={weight_decay}, hess_init={hess_init}, cand_curvature={cand_curvature}")
     with (save_dir / "stdout.log").open("w", encoding="utf-8") as log:
         result = subprocess.run(
             cmd,
@@ -151,14 +155,14 @@ def run_training(lr: str, weight_decay: str, cand_curvature: str, dry_run: bool 
         )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Training failed for lr={lr}, weight-decay={weight_decay}, "
+            f"Training failed for lr={lr}, weight-decay={weight_decay}, hess_init={hess_init}, "
             f"cand_curvature={cand_curvature}. See {save_dir / 'stdout.log'}"
         )
     return save_dir
 
 
 def best_val_metrics(
-    save_dir: Path, lr: str, weight_decay: str, cand_curvature: str
+    save_dir: Path, lr: str, weight_decay: str, hess_init: str, cand_curvature: str
 ) -> dict[str, str | float | int]:
     val_csv = save_dir / "val.csv"
     if not val_csv.exists():
@@ -173,7 +177,7 @@ def best_val_metrics(
     return {
         "lr": lr,
         "weight_decay": weight_decay,
-        "hess_init": HESS_INIT,
+        "hess_init": hess_init,
         "cand_curvature": cand_curvature,
         "beta1": BETA1,
         "beta2": BETA2,
@@ -187,13 +191,13 @@ def best_val_metrics(
 
 def markdown_table(rows: list[dict[str, str | float | int]]) -> str:
     header = (
-        "| lr | weight-decay | cand_curvature | best val NLL | best val accuracy | best val ECE | epoch | stage |"
+        "| lr | weight-decay | h0 | cand_curvature | best val NLL | best val accuracy | best val ECE | epoch | stage |"
     )
-    divider = "|---|---:|---:|---:|---:|---:|---:|---|"
+    divider = "|---|---:|---:|---:|---:|---:|---:|---:|---|"
     lines = [header, divider]
     for row in rows:
         lines.append(
-            "| {lr} | {weight_decay} | {cand_curvature} | {best_val_nll:.6f} | "
+            "| {lr} | {weight_decay} | {hess_init} | {cand_curvature} | {best_val_nll:.6f} | "
             "{best_val_accuracy:.6f} | {best_val_ece:.6f} | {epoch} | {stage} |".format(**row)
         )
     return "\n".join(lines)
@@ -233,12 +237,12 @@ def write_summary(
         "seeds: [0, 1, 2]\n"
         f"device: {DEVICE}\n"
         f"traindir: \"runs/final/ucbopt/{DATASET}_{MODEL}/"
-        f"lr_{best['lr']}_wd_{best['weight_decay']}_hi_1.0_curv_{best['cand_curvature']}_ep_100\"\n"
+        f"lr_{best['lr']}_wd_{best['weight_decay']}_h0_{best['hess_init']}_curv_{best['cand_curvature']}_ep_100\"\n"
         "train_args:\n"
         f"  lr: \"{best['lr']}\"\n"
         "  e: \"100\"\n"
         f"  weight-decay: \"{best['weight_decay']}\"\n"
-        "  hess_init: \"1.0\"\n"
+        f"  hess_init: \"{best['hess_init']}\"\n"
         f"  cand_curvature: \"{best['cand_curvature']}\"\n"
         "  beta1: \"0.9\"\n"
         "  beta2: \"0.99999\"\n"
@@ -259,100 +263,111 @@ def main() -> None:
     args = parser.parse_args()
 
     rows: list[dict[str, str | float | int]] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str, str, str]] = set()
 
     def add_row(row: dict[str, str | float | int], stage: str) -> None:
-        key = (str(row["lr"]), str(row["weight_decay"]), str(row["cand_curvature"]))
+        key = (str(row["lr"]), str(row["weight_decay"]), str(row["hess_init"]), str(row["cand_curvature"]))
         if key not in seen:
             seen.add(key)
             rows.append({**row, "stage": stage})
 
-    print("Stage 1: learning-rate sweep")
-    for lr in LR_SWEEP:
-        save_dir = run_training(lr, LR_SWEEP_WD, LR_SWEEP_CURVATURE, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(best_val_metrics(save_dir, lr, LR_SWEEP_WD, LR_SWEEP_CURVATURE), "lr_sweep")
+    for hess_init in HESS_INIT_SWEEP:
+        print(f"\n=== hess_init={hess_init} ===")
 
-    if args.dry_run:
-        best_lr = "<best_lr_from_stage_1>"
-    else:
-        lr_rows = [r for r in rows if r["stage"] == "lr_sweep"]
-        best_lr = str(min(lr_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
-        print(f"Best learning rate from stage 1: {best_lr}")
+        print("Stage 1: learning-rate sweep")
+        for lr in LR_SWEEP:
+            save_dir = run_training(lr, LR_SWEEP_WD, hess_init, LR_SWEEP_CURVATURE, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, lr, LR_SWEEP_WD, hess_init, LR_SWEEP_CURVATURE), "lr_sweep")
 
-    print("Stage 2: weight-decay sweep")
-    for weight_decay in WD_SWEEP:
-        save_dir = run_training(best_lr, weight_decay, WD_SWEEP_CURVATURE, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(
-                best_val_metrics(save_dir, best_lr, weight_decay, WD_SWEEP_CURVATURE), "wd_sweep"
+        if args.dry_run:
+            best_lr = "<best_lr_from_stage_1>"
+        else:
+            lr_rows = [r for r in rows if r["stage"] == "lr_sweep" and str(r["hess_init"]) == hess_init]
+            best_lr = str(min(lr_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
+            print(f"Best learning rate from stage 1 (h0={hess_init}): {best_lr}")
+
+        print("Stage 2: weight-decay sweep")
+        for weight_decay in WD_SWEEP:
+            save_dir = run_training(best_lr, weight_decay, hess_init, WD_SWEEP_CURVATURE, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(
+                    best_val_metrics(save_dir, best_lr, weight_decay, hess_init, WD_SWEEP_CURVATURE), "wd_sweep"
+                )
+
+        if args.dry_run:
+            best_wd = "<best_wd_from_stage_2>"
+        else:
+            wd_rows = [
+                r for r in rows
+                if r["stage"] in ("lr_sweep", "wd_sweep") and str(r["hess_init"]) == hess_init
+            ]
+            best_row = min(wd_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr = str(best_row["lr"])
+            best_wd = str(best_row["weight_decay"])
+            print(f"Best config from stage 2 (h0={hess_init}): lr={best_lr}, weight-decay={best_wd}")
+
+        print("Stage 3: candidate-curvature sweep")
+        for cand_curvature in CURVATURE_SWEEP:
+            if not args.dry_run and float(cand_curvature) >= float(best_wd):
+                print(
+                    f"Skipping cand_curvature={cand_curvature} because it is >= weight_decay={best_wd}"
+                )
+                continue
+            save_dir = run_training(best_lr, best_wd, hess_init, cand_curvature, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(
+                    best_val_metrics(save_dir, best_lr, best_wd, hess_init, cand_curvature), "curvature_sweep"
+                )
+
+        print("Stage 4: refined candidate-curvature sweep")
+        summary_csv = OUTPUT_ROOT / OPTIMIZER / f"{DATASET}_{MODEL}" / "tuning_summary.csv"
+        if args.dry_run:
+            best_lr_s4 = "<best_lr_from_summary>"
+            best_wd_s4 = "<best_wd_from_summary>"
+        elif summary_csv.exists():
+            with summary_csv.open(newline="", encoding="utf-8") as f:
+                prior_rows = list(csv.DictReader(f))
+            h0_prior_rows = [r for r in prior_rows if str(r.get("hess_init", "")) == hess_init]
+            if not h0_prior_rows:
+                h0_prior_rows = prior_rows
+            best_prior = min(h0_prior_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr_s4 = str(best_prior["lr"])
+            best_wd_s4 = str(best_prior["weight_decay"])
+            print(f"Stage 4 best config from summary CSV (h0={hess_init}): lr={best_lr_s4}, weight-decay={best_wd_s4}")
+        elif rows:
+            h0_rows = [
+                r for r in rows
+                if r["stage"] in ("lr_sweep", "wd_sweep", "curvature_sweep")
+                and str(r["hess_init"]) == hess_init
+            ]
+            best_row = min(h0_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr_s4 = str(best_row["lr"])
+            best_wd_s4 = str(best_row["weight_decay"])
+            print(f"Stage 4 best config from in-session rows (h0={hess_init}): lr={best_lr_s4}, weight-decay={best_wd_s4}")
+        else:
+            raise RuntimeError(
+                f"No tuning_summary.csv found at {summary_csv} and no in-session rows. "
+                "Run stages 1-3 first."
             )
 
-    if args.dry_run:
-        best_wd = "<best_wd_from_stage_2>"
-    else:
-        wd_rows = [r for r in rows if r["stage"] in ("lr_sweep", "wd_sweep")]
-        best_row = min(wd_rows, key=lambda r: float(r["best_val_nll"]))
-        best_lr = str(best_row["lr"])
-        best_wd = str(best_row["weight_decay"])
-        print(f"Best config from stage 2: lr={best_lr}, weight-decay={best_wd}")
-
-    print("Stage 3: candidate-curvature sweep")
-    for cand_curvature in CURVATURE_SWEEP:
-        if not args.dry_run and float(cand_curvature) >= float(best_wd):
-            print(
-                f"Skipping cand_curvature={cand_curvature} because it is >= weight_decay={best_wd}"
-            )
-            continue
-        save_dir = run_training(best_lr, best_wd, cand_curvature, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(
-                best_val_metrics(save_dir, best_lr, best_wd, cand_curvature), "curvature_sweep"
-            )
-
-    print("Stage 4: refined candidate-curvature sweep")
-    summary_csv = OUTPUT_ROOT / OPTIMIZER / f"{DATASET}_{MODEL}" / "tuning_summary.csv"
-    if args.dry_run:
-        best_lr_s4 = "<best_lr_from_summary>"
-        best_wd_s4 = "<best_wd_from_summary>"
-    elif summary_csv.exists():
-        with summary_csv.open(newline="", encoding="utf-8") as f:
-            prior_rows = list(csv.DictReader(f))
-        if not prior_rows:
-            raise RuntimeError(f"tuning_summary.csv is empty: {summary_csv}")
-        best_prior = min(prior_rows, key=lambda r: float(r["best_val_nll"]))
-        best_lr_s4 = str(best_prior["lr"])
-        best_wd_s4 = str(best_prior["weight_decay"])
-        print(f"Stage 4 best config from summary CSV: lr={best_lr_s4}, weight-decay={best_wd_s4}")
-    elif rows:
-        stage13_rows = [r for r in rows if r["stage"] in ("lr_sweep", "wd_sweep", "curvature_sweep")]
-        best_row = min(stage13_rows, key=lambda r: float(r["best_val_nll"]))
-        best_lr_s4 = str(best_row["lr"])
-        best_wd_s4 = str(best_row["weight_decay"])
-        print(f"Stage 4 best config from in-session rows: lr={best_lr_s4}, weight-decay={best_wd_s4}")
-    else:
-        raise RuntimeError(
-            f"No tuning_summary.csv found at {summary_csv} and no in-session rows. "
-            "Run stages 1-3 first."
-        )
-
-    for cand_curvature in CURVATURE_SWEEP_REFINED:
-        if not args.dry_run and float(cand_curvature) >= float(best_wd_s4):
-            print(
-                f"Skipping cand_curvature={cand_curvature} because it is >= weight_decay={best_wd_s4}"
-            )
-            continue
-        save_dir = run_training(best_lr_s4, best_wd_s4, cand_curvature, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(
-                best_val_metrics(save_dir, best_lr_s4, best_wd_s4, cand_curvature),
-                "curvature_sweep_refined",
-            )
+        for cand_curvature in CURVATURE_SWEEP_REFINED:
+            if not args.dry_run and float(cand_curvature) >= float(best_wd_s4):
+                print(
+                    f"Skipping cand_curvature={cand_curvature} because it is >= weight_decay={best_wd_s4}"
+                )
+                continue
+            save_dir = run_training(best_lr_s4, best_wd_s4, hess_init, cand_curvature, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(
+                    best_val_metrics(save_dir, best_lr_s4, best_wd_s4, hess_init, cand_curvature),
+                    "curvature_sweep_refined",
+                )
 
     if args.dry_run:
         return
 
-    rows = sorted(rows, key=lambda r: (str(r["lr"]), str(r["weight_decay"]), str(r["cand_curvature"])))
+    rows = sorted(rows, key=lambda r: (str(r["hess_init"]), str(r["lr"]), str(r["weight_decay"]), str(r["cand_curvature"])))
     best = min(rows, key=lambda r: float(r["best_val_nll"]))
     write_summary(rows, best)
 
@@ -361,12 +376,12 @@ def main() -> None:
     print("\nSelected best config by validation NLL:")
     print(
         f"lr={best['lr']}, weight-decay={best['weight_decay']}, "
-        f"hess_init={HESS_INIT}, cand_curvature={best['cand_curvature']}"
+        f"hess_init={best['hess_init']}, cand_curvature={best['cand_curvature']}"
     )
     print("\nRecommended final uCBOpt run config:")
     print(f"lr: {best['lr']}")
     print(f"weight-decay: {best['weight_decay']}")
-    print(f"hess_init: {HESS_INIT}")
+    print(f"hess_init: {best['hess_init']}")
     print(f"cand_curvature: {best['cand_curvature']}")
     print(f"beta1: {BETA1}")
     print(f"beta2: {BETA2}")
@@ -375,7 +390,7 @@ def main() -> None:
     print(
         "final output directory pattern: "
         f"runs/final/ucbopt/{DATASET}_{MODEL}/"
-        f"lr_{best['lr']}_wd_{best['weight_decay']}_hi_1.0_curv_{best['cand_curvature']}_ep_100"
+        f"lr_{best['lr']}_wd_{best['weight_decay']}_h0_{best['hess_init']}_curv_{best['cand_curvature']}_ep_100"
     )
 
 
