@@ -3,6 +3,9 @@
 Stages:
   1. Gamma sweep   (fixed lr=5e-2, wd=1e-4, beta3=0.999)
   2. Beta3 sweep   (fixed lr, wd, best gamma from stage 1)
+
+All stages are run for every value in HESS_INIT_SWEEP (in order); the overall
+best across all h0 values determines the recommended final config.
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 
 LR = "5e-2"
 WEIGHT_DECAY = "1e-4"
-HESS_INIT = "1.0"
+HESS_INIT_SWEEP = ["1.0", "0.5"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
 BETA3_DEFAULT = "0.999"
@@ -64,12 +67,12 @@ BETA3_SWEEP = [
 ]
 
 
-def run_dir(gamma: str, beta3: str, epochs: str = EPOCHS) -> Path:
+def run_dir(gamma: str, beta3: str, hess_init: str, epochs: str = EPOCHS) -> Path:
     return (
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{WEIGHT_DECAY}_hi_{HESS_INIT}_gamma_{gamma}_b3_{beta3}_ep_{epochs}"
+        / f"lr_{LR}_wd_{WEIGHT_DECAY}_hi_{hess_init}_gamma_{gamma}_b3_{beta3}_ep_{epochs}"
     )
 
 
@@ -84,7 +87,7 @@ def completed_val_csv(val_csv: Path, epochs: str = EPOCHS) -> bool:
         return False
 
 
-def train_command(gamma: str, beta3: str, save_dir: Path) -> list[str]:
+def train_command(gamma: str, beta3: str, hess_init: str, save_dir: Path) -> list[str]:
     return [
         sys.executable,
         "-u",
@@ -105,7 +108,7 @@ def train_command(gamma: str, beta3: str, save_dir: Path) -> list[str]:
         "--wd",
         WEIGHT_DECAY,
         "--hess_init",
-        HESS_INIT,
+        hess_init,
         "--gamma",
         gamma,
         "--beta1",
@@ -133,11 +136,11 @@ def train_command(gamma: str, beta3: str, save_dir: Path) -> list[str]:
     ]
 
 
-def run_training(gamma: str, beta3: str, dry_run: bool = False) -> Path:
-    save_dir = run_dir(gamma, beta3)
+def run_training(gamma: str, beta3: str, hess_init: str, dry_run: bool = False) -> Path:
+    save_dir = run_dir(gamma, beta3, hess_init)
     val_csv = save_dir / "val.csv"
 
-    cmd = train_command(gamma, beta3, save_dir)
+    cmd = train_command(gamma, beta3, hess_init, save_dir)
     if dry_run:
         print(" ".join(cmd))
         return save_dir
@@ -149,7 +152,7 @@ def run_training(gamma: str, beta3: str, dry_run: bool = False) -> Path:
         print(f"Skipping completed run: {save_dir}")
         return save_dir
 
-    print(f"Running gamma={gamma}, beta3={beta3}")
+    print(f"Running gamma={gamma}, beta3={beta3}, hess_init={hess_init}")
     with (save_dir / "stdout.log").open("w", encoding="utf-8") as log:
         result = subprocess.run(
             cmd,
@@ -161,14 +164,14 @@ def run_training(gamma: str, beta3: str, dry_run: bool = False) -> Path:
         )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Training failed for gamma={gamma}, beta3={beta3}. "
+            f"Training failed for gamma={gamma}, beta3={beta3}, hess_init={hess_init}. "
             f"See {save_dir / 'stdout.log'}"
         )
     return save_dir
 
 
 def best_val_metrics(
-    save_dir: Path, gamma: str, beta3: str
+    save_dir: Path, gamma: str, beta3: str, hess_init: str
 ) -> dict[str, str | float | int]:
     val_csv = save_dir / "val.csv"
     if not val_csv.exists():
@@ -183,7 +186,7 @@ def best_val_metrics(
     return {
         "lr": LR,
         "weight_decay": WEIGHT_DECAY,
-        "hess_init": HESS_INIT,
+        "hess_init": hess_init,
         "gamma": gamma,
         "beta1": BETA1,
         "beta2": BETA2,
@@ -198,13 +201,13 @@ def best_val_metrics(
 
 def markdown_table(rows: list[dict[str, str | float | int]]) -> str:
     header = (
-        "| lr | weight-decay | gamma | beta3 | best val NLL | best val accuracy | best val ECE | epoch | stage |"
+        "| lr | weight-decay | h0 | gamma | beta3 | best val NLL | best val accuracy | best val ECE | epoch | stage |"
     )
-    divider = "|---|---:|---:|---:|---:|---:|---:|---:|---|"
+    divider = "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"
     lines = [header, divider]
     for row in sorted(rows, key=lambda r: float(r["best_val_nll"])):
         lines.append(
-            "| {lr} | {weight_decay} | {gamma} | {beta3} | {best_val_nll:.6f} | "
+            "| {lr} | {weight_decay} | {hess_init} | {gamma} | {beta3} | {best_val_nll:.6f} | "
             "{best_val_accuracy:.6f} | {best_val_ece:.6f} | {epoch} | {stage} |".format(**row)
         )
     return "\n".join(lines)
@@ -277,32 +280,38 @@ def main() -> None:
     args = parser.parse_args()
 
     rows: list[dict[str, str | float | int]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
     def add_row(row: dict[str, str | float | int], stage: str) -> None:
-        key = (str(row["gamma"]), str(row["beta3"]))
+        key = (str(row["hess_init"]), str(row["gamma"]), str(row["beta3"]))
         if key not in seen:
             seen.add(key)
             rows.append({**row, "stage": stage})
 
-    print("Stage 1: gamma sweep")
-    for gamma in GAMMA_SWEEP:
-        save_dir = run_training(gamma, BETA3_DEFAULT, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(best_val_metrics(save_dir, gamma, BETA3_DEFAULT), "gamma_sweep")
+    for hess_init in HESS_INIT_SWEEP:
+        print(f"\n=== hess_init={hess_init} ===")
 
-    if args.dry_run:
-        best_gamma = "<best_gamma_from_stage_1>"
-    else:
-        gamma_rows = [r for r in rows if r["stage"] == "gamma_sweep"]
-        best_gamma = str(min(gamma_rows, key=lambda r: float(r["best_val_nll"]))["gamma"])
-        print(f"Best gamma from stage 1: {best_gamma}")
+        print("Stage 1: gamma sweep")
+        for gamma in GAMMA_SWEEP:
+            save_dir = run_training(gamma, BETA3_DEFAULT, hess_init, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, gamma, BETA3_DEFAULT, hess_init), "gamma_sweep")
 
-    print("Stage 2: beta3 sweep")
-    for beta3 in BETA3_SWEEP:
-        save_dir = run_training(best_gamma, beta3, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(best_val_metrics(save_dir, best_gamma, beta3), "beta3_sweep")
+        if args.dry_run:
+            best_gamma = "<best_gamma_from_stage_1>"
+        else:
+            gamma_rows = [
+                r for r in rows
+                if r["stage"] == "gamma_sweep" and str(r["hess_init"]) == hess_init
+            ]
+            best_gamma = str(min(gamma_rows, key=lambda r: float(r["best_val_nll"]))["gamma"])
+            print(f"Best gamma from stage 1 (h0={hess_init}): {best_gamma}")
+
+        print("Stage 2: beta3 sweep")
+        for beta3 in BETA3_SWEEP:
+            save_dir = run_training(best_gamma, beta3, hess_init, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, best_gamma, beta3, hess_init), "beta3_sweep")
 
     if args.dry_run:
         return
