@@ -60,9 +60,6 @@ def get_args():
     p.add_argument("--no-rescale_lr", dest="rescale_lr", action="store_false")
     p.add_argument("--clip-radius", default=float("inf"), type=float,
                    help="elementwise update clipping radius (inf = disabled)")
-    p.add_argument("--bias-corr", action="store_true", default=True,
-                   help="apply bias correction to m and h (default: on)")
-    p.add_argument("--no-bias-corr", dest="bias_corr", action="store_false")
     p.add_argument("--decoupled-wd", action="store_true", default=False,
                    help="apply weight decay decoupled from the preconditioner")
     p.add_argument("--maximize", action="store_true", default=False)
@@ -81,7 +78,6 @@ def build_optimizer(args, model):
         eps=args.eps,
         rescale_lr=args.rescale_lr,
         clip_radius=args.clip_radius,
-        bias_corr=args.bias_corr,
         maximize=args.maximize,
     )
 
