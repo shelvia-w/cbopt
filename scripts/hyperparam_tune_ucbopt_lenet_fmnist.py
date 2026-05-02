@@ -43,7 +43,7 @@ LR_SWEEP = ["1e-1", "5e-2", "1e-2", "5e-3", "1e-3"]
 LR_SWEEP_WD = "1e-4"
 LR_SWEEP_CURVATURE = "0.0"
 
-WD_SWEEP = ["1e-5", "1e-4", "1e-3"]
+WD_SWEEP = ["1e-5", "1e-4", "5e-4", "1e-3", "2e-3"]
 WD_SWEEP_CURVATURE = "0.0"
 
 CURVATURE_SWEEP = [
