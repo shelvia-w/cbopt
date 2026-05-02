@@ -31,7 +31,8 @@ DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 ESS = "50000"
 HESS_INIT_SWEEP = ["0.1", "0.2", "0.5", "1.0"]
 TRAIN_SAMPLES = "1"
-LR_SWEEP = ["1e-1", "5e-2", "1e-2", "5e-3", "1e-3"]
+RESCALE_LR = True
+LR_SWEEP = ["1e0", "5e-1", "1e-1", "5e-2", "1e-2"]
 WD_SWEEP = ["0", "1e-5", "1e-4", "5e-4", "1e-3", "2e-3"]
 LR_SWEEP_WD = "1e-4"
 
@@ -41,7 +42,7 @@ def run_dir(lr: str, weight_decay: str, hess_init: str, epochs: str = EPOCHS) ->
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{lr}_wd_{weight_decay}_ess_{ESS}_h0_{hess_init}_ep_{epochs}"
+        / f"lr_{lr}_wd_{weight_decay}_ess_{ESS}_h0_{hess_init}_rslr_{RESCALE_LR}_ep_{epochs}"
     )
 
 
@@ -82,6 +83,7 @@ def train_command(lr: str, weight_decay: str, hess_init: str, save_dir: Path) ->
         hess_init,
         "--mc_samples",
         TRAIN_SAMPLES,
+        *(["--rescale_lr"] if RESCALE_LR else []),
         "-e",
         EPOCHS,
         "-tb",
@@ -193,7 +195,7 @@ def write_summary(rows: list[dict[str, str | float | int]], best: dict[str, str 
         "seeds: [0, 1, 2]\n"
         f"device: {DEVICE}\n"
         f"traindir: \"runs/final/ivon/{DATASET}_{MODEL}/"
-        f"lr_{best['lr']}_wd_{best['weight_decay']}_ess_{ESS}_h0_{best['hess_init']}_ep_100\"\n"
+        f"lr_{best['lr']}_wd_{best['weight_decay']}_ess_{ESS}_h0_{best['hess_init']}_rslr_{RESCALE_LR}_ep_100\"\n"
         "train_args:\n"
         f"  lr: \"{best['lr']}\"\n"
         "  e: \"100\"\n"
@@ -205,7 +207,7 @@ def write_summary(rows: list[dict[str, str | float | int]], best: dict[str, str 
         "  vbatch: \"256\"\n"
         "  tvsplit: \"0.9\"\n"
         f"  j: \"{WORKERS}\"\n"
-        "train_flags: []\n"
+        f"train_flags: {['rescale_lr'] if RESCALE_LR else []}\n"
     )
     (summary_dir / "recommended_final_config.yaml").write_text(recommendation, encoding="utf-8")
 
@@ -267,7 +269,7 @@ def main() -> None:
     print("seeds: [0, 1, 2]")
     print(
         "final output directory pattern: "
-        f"runs/final/ivon/{DATASET}_{MODEL}/lr_{best['lr']}_wd_{best['weight_decay']}_ess_{ESS}_h0_{best['hess_init']}_ep_100"
+        f"runs/final/ivon/{DATASET}_{MODEL}/lr_{best['lr']}_wd_{best['weight_decay']}_ess_{ESS}_h0_{best['hess_init']}_rslr_{RESCALE_LR}_ep_100"
     )
 
 

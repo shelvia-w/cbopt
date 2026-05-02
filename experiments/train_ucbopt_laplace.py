@@ -18,7 +18,7 @@ from core.logging import coro_log_timed
 from core.utils import check_cuda, deterministic_run, mkdirp
 from models import STANDARDMODELS
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, OUTCLASS, INSIZE
-from core.engine import SummaryWriter, do_epoch, do_evalbatch
+from core.engine import SummaryWriter, do_epoch, do_evalbatch, do_trainbatch
 
 
 def get_args():
@@ -95,15 +95,6 @@ def build_scheduler(args, optimizer):
         )
     return None
 
-
-def do_trainbatch_ucbopt(batchinput, model, optimizer):
-    images, target = batchinput
-    optimizer.zero_grad(set_to_none=True)
-    output = model(images)
-    loss = nnf.cross_entropy(output, target)
-    loss.backward()
-    optimizer.step()
-    return nnf.softmax(output.detach(), dim=1), target, loss.item()
 
 
 class LaplaceEvalWrapper:
@@ -255,7 +246,7 @@ if __name__ == "__main__":
 
         model.train()
         log_map.send((e, "train", len(train_loader), None))
-        do_epoch(train_loader, do_trainbatch_ucbopt, log_map, device,
+        do_epoch(train_loader, do_trainbatch, log_map, device,
                  model=model, optimizer=optimizer)
         log_map.throw(StopIteration)
 
