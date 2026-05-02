@@ -81,7 +81,6 @@ def build_optimizer(args, model):
         rescale_lr=args.rescale_lr,
         clip_radius=args.clip_radius,
         bias_corr=args.bias_corr,
-        decoupled_wd=args.decoupled_wd,
         maximize=args.maximize,
     )
 

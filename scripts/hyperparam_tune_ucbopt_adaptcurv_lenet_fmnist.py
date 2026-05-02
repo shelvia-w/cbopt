@@ -72,7 +72,7 @@ def run_dir(gamma: str, beta3: str, hess_init: str, epochs: str = EPOCHS) -> Pat
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{WEIGHT_DECAY}_hi_{hess_init}_gamma_{gamma}_b3_{beta3}_ep_{epochs}"
+        / f"lr_{LR}_wd_{WEIGHT_DECAY}_h0_{hess_init}_gamma_{gamma}_b3_{beta3}_ep_{epochs}"
     )
 
 
@@ -248,7 +248,7 @@ def write_summary(
         "seeds: [0, 1, 2]\n"
         f"device: {DEVICE}\n"
         f"traindir: \"final/ucbopt_adaptcurv/{DATASET}_{MODEL}/"
-        f"lr_{best['lr']}_wd_{best['weight_decay']}_hi_{best['hess_init']}"
+        f"lr_{best['lr']}_wd_{best['weight_decay']}_h0_{best['hess_init']}"
         f"_gamma_{best['gamma']}_b3_{best['beta3']}_ep_100\"\n"
         "train_args:\n"
         f"  lr: \"{best['lr']}\"\n"
@@ -344,7 +344,7 @@ def main() -> None:
     print(
         "final output directory pattern: "
         f"final/ucbopt_adaptcurv/{DATASET}_{MODEL}/"
-        f"lr_{best['lr']}_wd_{best['weight_decay']}_hi_{best['hess_init']}"
+        f"lr_{best['lr']}_wd_{best['weight_decay']}_h0_{best['hess_init']}"
         f"_gamma_{best['gamma']}_b3_{best['beta3']}_ep_100"
     )
 
