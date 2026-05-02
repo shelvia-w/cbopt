@@ -35,7 +35,7 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 
-HESS_INIT_SWEEP = ["0.5", "1.0"]
+HESS_INIT_SWEEP = ["0.1", "0.2", "0.5", "1.0"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
 
