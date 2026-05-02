@@ -35,7 +35,7 @@ DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 
 LR = "5e-2"
 WEIGHT_DECAY = "1e-4"
-HESS_INIT_SWEEP = ["1.0", "0.5"]
+HESS_INIT_SWEEP = ["1.0", "0.5", "0.2", "0.1"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
 BETA3_DEFAULT = "0.999"
