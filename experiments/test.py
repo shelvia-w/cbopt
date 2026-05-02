@@ -7,6 +7,7 @@ from os.path import join as pjoin, exists
 from glob import glob
 
 import torch
+import torch.nn.functional as nnf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from core.checkpoint import loadcheckpoint
@@ -16,6 +17,13 @@ from core.utils import check_cuda, deterministic_run, get_outputsaver, mkdirp, s
 from core.engine import do_epoch, do_evalbatch
 from core.calibration import bins2diagram
 from data.dataloaders import TRAINDATALOADERS, TESTDATALOADER, OUTCLASS, NTRAIN, NTEST
+from methods.baselines.ivon import IVON
+from models.uncertainty.swag import SWAG
+
+try:
+    from laplace import Laplace
+except ImportError:
+    Laplace = None
 
 
 def get_args():
@@ -39,6 +47,11 @@ def get_args():
     p.add_argument("-tr", "--testrepeat", default=1, type=int,
                    help="Number of stochastic forward passes to average (e.g. 64 for MC Dropout).")
     p.add_argument("--checkpoint", default="best", choices=("best", "latest"))
+    p.add_argument("-sms", "--swag_modelsamples", type=int, default=None)
+    p.add_argument("-ssm", "--swag_samplemode", default="modelwise", choices=SWAG.sample_mode)
+    p.add_argument("--pred_type", default="glm", choices=["glm", "nn"])
+    p.add_argument("--link_approx", default="probit", choices=["mc", "probit", "bridge", "bridge_norm"])
+    p.add_argument("--n_samples", default=100, type=int)
     return p.parse_args()
 
 
@@ -60,6 +73,85 @@ def get_dataloader(args, device):
             args.batch,
         )
     return data_loader
+
+
+def _nll_from_prob(prob, gt):
+    return nnf.nll_loss(prob.clamp_min(1e-12).log(), gt).item()
+
+
+@torch.no_grad()
+def do_evalbatch_ivon(batchinput, model, optimizer, repeat: int = 1):
+    inputs, gt = batchinput[:-1], batchinput[-1]
+    repeat = max(1, repeat)
+    cumprob = torch.zeros([], device=inputs[0].device, dtype=inputs[0].dtype)
+    for _ in range(repeat):
+        with optimizer.sampled_params():
+            output = model(*inputs)
+        cumprob = cumprob + nnf.softmax(output, 1) / repeat
+    return cumprob, gt, _nll_from_prob(cumprob, gt)
+
+
+@torch.no_grad()
+def do_evalbatch_swag(batchinput, models):
+    inputs = batchinput[:-1]
+    gt = batchinput[-1]
+    prob = torch.zeros([], device=inputs[0].device, dtype=inputs[0].dtype)
+    for model in models:
+        prob = prob + nnf.softmax(model(*inputs), 1) / len(models)
+    return prob, gt, _nll_from_prob(prob, gt)
+
+
+@torch.no_grad()
+def do_evalbatch_laplace(batchinput, la, pred_type="glm", link_approx="probit", n_samples=100):
+    inputs, gt = batchinput[:-1], batchinput[-1]
+    kwargs = {"pred_type": pred_type}
+    if pred_type == "glm":
+        kwargs["link_approx"] = link_approx
+    if link_approx == "mc" or pred_type == "nn":
+        kwargs["n_samples"] = n_samples
+    prob = la(inputs[0], **kwargs)
+    return prob, gt, _nll_from_prob(prob, gt)
+
+
+def run_eval(data_loader, model, optimizer, la, args, log_metrics, device):
+    if la is not None:
+        do_epoch(
+            data_loader,
+            do_evalbatch_laplace,
+            log_metrics,
+            device,
+            la=la,
+            pred_type=args.pred_type,
+            link_approx=args.link_approx,
+            n_samples=args.n_samples,
+        )
+    elif isinstance(optimizer, IVON) and args.testrepeat > 0:
+        model.eval()
+        do_epoch(
+            data_loader,
+            do_evalbatch_ivon,
+            log_metrics,
+            device,
+            model=model,
+            optimizer=optimizer,
+            repeat=args.testrepeat,
+        )
+    elif isinstance(model, SWAG):
+        nsamples = args.swag_modelsamples or max(1, args.testrepeat)
+        sampled_models = [model.sampled_model(mode=args.swag_samplemode) for _ in range(nsamples)]
+        for sampled_model in sampled_models:
+            sampled_model.eval()
+        do_epoch(data_loader, do_evalbatch_swag, log_metrics, device, models=sampled_models)
+    else:
+        model.eval()
+        do_epoch(
+            data_loader,
+            do_evalbatch,
+            log_metrics,
+            device,
+            model=model,
+            repeat=max(1, args.testrepeat),
+        )
 
 
 if __name__ == "__main__":
@@ -96,9 +188,25 @@ if __name__ == "__main__":
             continue
 
         model_path = model_paths[-1]
+        laplace_path = pjoin(os.path.dirname(model_path), "laplace_state.pt")
         print(f"loading model from {model_path} ...\n")
-        _, model, optimizer = loadcheckpoint(model_path, device)[:3]
+        _, model, optimizer, _, _ = loadcheckpoint(model_path, device)
         print(optimizer.defaults)
+
+        la = None
+        if exists(laplace_path):
+            if Laplace is None:
+                raise ImportError("laplace-torch is not installed, but laplace_state.pt was found.")
+            lap_ckpt = torch.load(laplace_path, map_location=device)
+            lap_cfg = lap_ckpt["config"]
+            la = Laplace(
+                model,
+                likelihood="classification",
+                subset_of_weights=lap_cfg["subset_of_weights"],
+                hessian_structure=lap_cfg["hessian_structure"],
+                prior_precision=lap_cfg["prior_precision"],
+            )
+            la.load_state_dict(lap_ckpt["state_dict"])
 
         data_loader = get_dataloader(args, device)
         dataset = args.dataset
@@ -118,14 +226,14 @@ if __name__ == "__main__":
 
         log_metrics.send((runfolder, prefix, len(data_loader), outputsaver))
         with torch.no_grad():
-            model.eval()
-            do_epoch(data_loader, do_evalbatch, log_metrics, device,
-                     model=model, repeat=args.testrepeat)
+            run_eval(data_loader, model, optimizer, la, args, log_metrics, device)
 
         bins, _, avgvloss = log_metrics.throw(StopIteration)[:3]
         if args.saveoutput:
             outputsaver.close()
         del model
+        if la is not None:
+            del la
 
         if args.plotdiagram:
             bins2diagram(
@@ -139,4 +247,3 @@ if __name__ == "__main__":
     summarize_csv(pjoin(args.save_dir, f"{prefix}.csv"))
     log_metrics.close()
     print(f">>> Test completed at {next(timer)[0].isoformat()} <<<\n")
-

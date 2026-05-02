@@ -28,6 +28,7 @@ test_args:
   tvsplit: "1.0"
   batch: "256"
   j: "0"
+  tr: "64"
 
 test_flags:
   - pd
