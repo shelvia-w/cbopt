@@ -1,10 +1,10 @@
 optimizer: mcdrop
-dataset: cifar10
+dataset: cifar100
 model: resnet20_mcdrop
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/mcdrop/cifar10_resnet20/lr_1e-1_wd_2e-4"
+traindir: "final/mcdrop/cifar100_resnet20/lr_1e-1_wd_2e-4"
 
 train_args:
   lr: "1e-1"

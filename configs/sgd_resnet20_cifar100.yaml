@@ -1,10 +1,10 @@
-optimizer: mcdrop
-dataset: cifar10
-model: resnet20_mcdrop
+optimizer: sgd
+dataset: cifar100
+model: resnet20
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/mcdrop/cifar10_resnet20/lr_1e-1_wd_2e-4"
+traindir: "final/sgd/cifar100_resnet20/lr_1e-1_wd_2e-4"
 
 train_args:
   lr: "1e-1"
@@ -25,8 +25,7 @@ eval_subdir: "eval"
 test_args:
   tvsplit: "1.0"
   batch: "256"
-  j: "0"
-  tr: "64"
+  j: "32"
 
 test_flags:
   - pd

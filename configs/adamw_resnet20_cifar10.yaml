@@ -4,10 +4,10 @@ model: resnet20
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/adamw/cifar10_resnet20/lr_5e-5_wd_2e-4"
+traindir: "final/adamw/cifar10_resnet20/lr_2e-3_wd_2e-4"
 
 train_args:
-  lr: "5e-5"
+  lr: "2e-3"
   e: "200"
   weight-decay: "2e-4"
   beta1: "0.9"

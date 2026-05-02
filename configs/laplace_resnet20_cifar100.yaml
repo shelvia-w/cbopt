@@ -1,20 +1,25 @@
-optimizer: mcdrop
-dataset: cifar10
-model: resnet20_mcdrop
+optimizer: laplace
+dataset: cifar100
+model: resnet20
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/mcdrop/cifar10_resnet20/lr_1e-1_wd_2e-4"
+traindir: "final/laplace/cifar100_resnet20/lr_1e-1_wd_2e-4"
 
 train_args:
   lr: "1e-1"
   e: "200"
   weight-decay: "2e-4"
-  beta1: "0.9"
+  momentum: "0.9"
   tbatch: "128"
   vbatch: "256"
   tvsplit: "0.9"
   j: "1"
+  subset_of_weights: "last_layer"
+  hessian_structure: "kron"
+  pred_type: "glm"
+  link_approx: "probit"
+  n_samples: "100"
 
 train_flags: []
 
