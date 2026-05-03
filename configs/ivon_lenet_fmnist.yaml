@@ -4,14 +4,14 @@ model: lenet
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/ivon/lenet_fmnist/lr_5e-2_wd_1e-3_h0_0.1"
+traindir: "final/ivon/lenet_fmnist/lr_5e-2_wd_1e-3_h0_0.5"
 
 train_args:
   lr: "5e-2"
   e: "100"
   weight-decay: "1e-3"
-  ess: "50000"
-  hess_init: "0.1"
+  ess: "54000"
+  hess_init: "0.5"
   mc_samples: "1"
   tbatch: "128"
   vbatch: "256"
