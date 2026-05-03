@@ -42,20 +42,19 @@ HESS_INIT_SWEEP = ["2.0", "1.0", "0.5", "0.1"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
 BETA3_DEFAULT = "0.999"
-GAMMA_DEFAULT = "1e-3"
+GAMMA_DEFAULT = "1.05"
 EPS = "1e-8"
 CLIP_RADIUS = "inf"
 
 GAMMA_SWEEP = [
-    "0.0",
-    "1e-4",
-    "5e-4",
-    "1e-3",
-    "5e-3",
-    "1e-2",
-    "5e-2",
-    "1e-1",
-    "4e-1",
+    "1.001",
+    "1.005",
+    "1.01",
+    "1.05",
+    "1.1",
+    "1.2",
+    "1.5",
+    "2.0",
 ]
 
 BETA3_SWEEP = [

@@ -1,25 +1,23 @@
-"""uCBOpt Lower Adaptive Curvature optimizer.
+"""lCBOpt Adaptive Curvature optimizer.
 
 Lower-CBO variant with decayed running maximum curvature tracking.
 
-The candidate precision Lambda_t is built from C_t, a decayed running maximum
-of the squared-gradient EMA (exp_avg_sq), so that Lambda_t tracks an upper
-envelope of the Hessian proxy:
+The curvature proxy incorporates weight decay:
 
-    H_t = exp_avg_sq          (EMA of squared gradients)
-    C_t = max(beta3 * C_{t-1}, H_t)   (decayed running max)
+    H_t      = exp_avg_sq                      (EMA of squared gradients)
+    H_curv_t = H_t + weight_decay
+    C_t      = max(beta3 * C_{t-1}, H_curv_t)  (decayed running max of H_curv)
 
-    Lambda_t = (1 + gamma) * C_t + Lambda_0 + eps
+    denom = gamma * C_t - H_curv_t + eps
 
-    denom = Lambda_t - H_t - Lambda_0
-          = (1 + gamma) * C_t - H_t + eps
+Because C_t >= H_curv_t (the running max is never below the current value),
+denom >= (gamma - 1) * H_curv_t + eps > 0 when gamma > 1.
 
-Because C_t >= H_t (the running max is never below the current value),
-denom >= gamma * H_t + eps > 0, so it is always positive.
+gamma > 1 is required and enforced in __init__.
 
 This intentionally differs from uCBOptAdaptCurv (upper-CBO), which uses:
 
-    denom = H_t - gamma * C_t + weight_decay
+    denom = H_curv_t - gamma * C_t
 
 where C_t is a decayed running *minimum*.  Here the roles are reversed:
 C_t is a running *maximum* and the sign in the denominator is flipped.
@@ -46,15 +44,17 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
         max_exp_avg_sq  -- decayed running max of exp_avg_sq (c_t), init to hess_init
 
     Update rules:
-        h_t    = beta2 * h_{t-1} + (1 - beta2) * g_t^2
-        c_t    = max(beta3 * c_{t-1}, h_t)
-        m_t    = beta1 * m_{t-1} + (1 - beta1) * g_t
-        m_hat  = m_t / (1 - beta1^t)        [bias-corrected]
-        denom  = (1 + gamma) * c_t - h_t + eps   [lower-CBO, always > 0]
-        numer  = m_hat + weight_decay * param
-        update = numer / denom
-        param -= lr_eff * update
+        h_t      = beta2 * h_{t-1} + (1 - beta2) * g_t^2
+        h_curv_t = h_t + weight_decay
+        c_t      = max(beta3 * c_{t-1}, h_curv_t)
+        m_t      = beta1 * m_{t-1} + (1 - beta1) * g_t
+        m_hat    = m_t / (1 - beta1^t)      [bias-corrected]
+        denom    = gamma * c_t - h_curv_t + eps   [lower-CBO, always > 0 when gamma > 1]
+        numer    = m_hat + weight_decay * param
+        update   = numer / denom
+        param   -= lr_eff * update
 
+    gamma > 1 is required (enforced in __init__).
     lr_eff = lr * (hess_init + weight_decay) if rescale_lr else lr
     """
 
@@ -65,7 +65,7 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
         betas: tuple[float, float, float] = (0.9, 0.99999, 0.999),
         weight_decay: float = 1e-4,
         hess_init: float = 1.0,
-        gamma: float = 0.1,
+        gamma: float = 1.05,
         eps: float = 1e-6,
         maximize: bool = False,
         clip_radius: float = 1.0,
@@ -84,8 +84,8 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             raise ValueError(f"hess_init must be > 0, got {hess_init}")
         if weight_decay < 0.0:
             raise ValueError(f"weight_decay must be >= 0, got {weight_decay}")
-        if gamma <= 0.0:
-            raise ValueError(f"gamma must be > 0, got {gamma}")
+        if gamma <= 1.0:
+            raise ValueError(f"gamma must be > 1 (required for denom = gamma*c - h_curv + eps > 0), got {gamma}")
         if eps <= 0.0:
             raise ValueError(f"eps must be > 0, got {eps}")
         if not (math.isinf(clip_radius) or clip_radius >= 0.0):
@@ -148,8 +148,8 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
                     state["step"] = 0
                     state["exp_avg"] = torch.zeros_like(p)
                     state["exp_avg_sq"] = torch.full_like(p, float(hess_init))
-                    # running max of exp_avg_sq; tracks upper envelope of curvature
-                    state["max_exp_avg_sq"] = torch.full_like(p, float(hess_init))
+                    # running max of h_curv = h + wd; init consistent with h_curv
+                    state["max_exp_avg_sq"] = torch.full_like(p, float(hess_init) + wd)
 
                 state["step"] += 1
                 step_counts.append(state["step"])
@@ -165,10 +165,13 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             torch._foreach_mul_(exp_avg_sqs, beta2)
             torch._foreach_add_(exp_avg_sqs, grad_sq, alpha=1.0 - beta2)
 
-            # c_t = max(beta3 * c_{t-1}, h_t)  — decayed running maximum
+            # h_curv_t = h_t + weight_decay
+            h_curv = torch._foreach_add(exp_avg_sqs, wd)
+
+            # c_t = max(beta3 * c_{t-1}, h_curv_t)  — decayed running maximum
             torch._foreach_mul_(max_exp_avg_sqs, beta3)
-            for c, h in zip(max_exp_avg_sqs, exp_avg_sqs):
-                torch.maximum(c, h, out=c)
+            for c, hc in zip(max_exp_avg_sqs, h_curv):
+                torch.maximum(c, hc, out=c)
 
             # m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
             torch._foreach_mul_(exp_avgs, beta1)
@@ -179,13 +182,11 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             m_hat = torch._foreach_div(exp_avgs, bc_m)
 
             # Lower-CBO denominator:
-            #   H_t = exp_avg_sq,  C_t = max_exp_avg_sq
-            #   Lambda_t = (1 + gamma) * C_t + Lambda_0 + eps
-            #   denom = Lambda_t - H_t - Lambda_0
-            #         = (1 + gamma) * C_t - H_t + eps
-            # C_t >= H_t by construction, so denom >= gamma * H_t + eps > 0.
-            denom = torch._foreach_mul(max_exp_avg_sqs, 1.0 + gamma)
-            torch._foreach_add_(denom, exp_avg_sqs, alpha=-1.0)
+            #   H_curv_t = h_t + wd,  C_t = max_exp_avg_sq (tracks H_curv)
+            #   denom = gamma * C_t - H_curv_t + eps
+            # C_t >= H_curv_t by construction, so denom >= (gamma-1)*H_curv_t + eps > 0.
+            denom = torch._foreach_mul(max_exp_avg_sqs, gamma)
+            torch._foreach_add_(denom, h_curv, alpha=-1.0)
             torch._foreach_add_(denom, eps)
             torch._foreach_clamp_min_(denom, eps)
 

@@ -26,16 +26,20 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
         min_exp_avg_sq -- decayed running minimum of exp_avg_sq (c_t), init to +inf
 
     Update rules:
-        h_t = beta2 * h_{t-1} + (1 - beta2) * g_t^2          (not bias-corrected)
-        m_t = beta1 * m_{t-1} + (1 - beta1) * g_t             (bias-corrected)
-        c_t = min(beta3 * c_{t-1}, h_t)
-        denom = h_t - gamma * c_t + weight_decay
-        numer = m_t + weight_decay * param
-        lr_eff = lr * (hess_init + weight_decay)  if rescale_lr else lr
-        param -= lr_eff * numer / denom
+        h_t      = beta2 * h_{t-1} + (1 - beta2) * g_t^2     (not bias-corrected)
+        m_t      = beta1 * m_{t-1} + (1 - beta1) * g_t        (bias-corrected)
+        h_curv_t = h_t + weight_decay
+        c_t      = min(beta3 * c_{t-1}, h_curv_t)
+        denom    = h_curv_t - gamma * c_t
+        numer    = m_t + weight_decay * param
+        lr_eff   = lr * (hess_init + weight_decay)  if rescale_lr else lr
+        param   -= lr_eff * numer / denom
 
-    When gamma=0 and rescale_lr=True, this reduces to original uCBOpt
-    (given the same lr, beta1, beta2, hess_init, weight_decay).
+    Incorporating weight_decay into h_curv means the curvature bound reflects
+    both the squared-gradient EMA and the L2 regularisation curvature.
+    When gamma=0 and rescale_lr=True, denom = h_curv_t = h_t + weight_decay,
+    which reduces to original uCBOpt (given the same lr, beta1, beta2,
+    hess_init, weight_decay).
     rescale_lr=True uses the same scalar LR rescaling as uCBOpt; the per-element
     adaptive curvature term (gamma * c_t) is not included in the scalar rescale.
     """
@@ -147,19 +151,20 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             torch._foreach_mul_(exp_avgs, beta1)
             torch._foreach_add_(exp_avgs, grads, alpha=1.0 - beta1)
 
-            # c_t = min(beta3 * c_{t-1}, h_t)  — decayed running minimum
+            # h_curv_t = h_t + weight_decay
+            h_curv = torch._foreach_add(exp_avg_sqs, wd)
+
+            # c_t = min(beta3 * c_{t-1}, h_curv_t)  — decayed running minimum
             torch._foreach_mul_(min_exp_avg_sqs, beta3)
-            for c, h in zip(min_exp_avg_sqs, exp_avg_sqs):
-                torch.minimum(c, h, out=c)
+            for c, hc in zip(min_exp_avg_sqs, h_curv):
+                torch.minimum(c, hc, out=c)
 
             # bias-correct m only; h is not bias-corrected
             bc_m = [1.0 - beta1 ** t for t in step_counts]
             m_hat = torch._foreach_div(exp_avgs, bc_m)
-            h_hat = list(exp_avg_sqs)
 
-            # denom = h_t - gamma * c_t + weight_decay
-            denom = torch._foreach_add(h_hat, min_exp_avg_sqs, alpha=-gamma)
-            torch._foreach_add_(denom, wd)
+            # denom = h_curv_t - gamma * c_t
+            denom = torch._foreach_add(h_curv, min_exp_avg_sqs, alpha=-gamma)
             torch._foreach_clamp_min_(denom, eps)
 
             # Coupled weight decay: matches original uCBOpt when gamma=0
