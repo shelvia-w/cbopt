@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import subprocess
 import sys
@@ -29,11 +30,11 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 ESS = "54000"
-HESS_INIT_SWEEP = ["0.1", "0.5", "1.0"]
+HESS_INIT_SWEEP = ["0.05", "0.1", "0.5", "1.0"]
 TRAIN_SAMPLES = "1"
 RESCALE_LR = False
-LR_SWEEP = ["5e-1","1e-1", "5e-2", "1e-2", "5e-3", "1e-3"]
-WD_SWEEP = ["0", "1e-5", "1e-4", "5e-4", "1e-3", "2e-3"]
+LR_SWEEP = ["5e-2", "1e-2", "5e-3", "1e-3", "5e-4", "1e-4"]
+WD_SWEEP = ["1e-5", "1e-4", "5e-4", "1e-3", "2e-3"]
 LR_SWEEP_WD = "1e-4"
 
 
@@ -124,24 +125,28 @@ def run_training(lr: str, weight_decay: str, hess_init: str, dry_run: bool = Fal
             check=False,
         )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"Training failed for lr={lr}, weight-decay={weight_decay}, hess_init={hess_init}. "
-            f"See {save_dir / 'stdout.log'}"
+        print(
+            f"Training failed (skipping) for lr={lr}, weight-decay={weight_decay}, "
+            f"hess_init={hess_init}. See {save_dir / 'stdout.log'}"
         )
+        return None
     return save_dir
 
 
-def best_val_metrics(save_dir: Path, lr: str, weight_decay: str, hess_init: str) -> dict[str, str | float | int]:
+def best_val_metrics(save_dir: Path, lr: str, weight_decay: str, hess_init: str) -> dict[str, str | float | int] | None:
     val_csv = save_dir / "val.csv"
     if not val_csv.exists():
-        raise FileNotFoundError(f"Missing validation metrics: {val_csv}")
+        return None
 
     with val_csv.open(newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
-    if not rows:
-        raise ValueError(f"No validation rows found in {val_csv}")
 
-    best = min(rows, key=lambda row: float(row["nll"]))
+    finite_rows = [r for r in rows if math.isfinite(float(r["nll"]))]
+    if not finite_rows:
+        print(f"No finite NLL in {val_csv} (all NaN/Inf) — skipping")
+        return None
+
+    best = min(finite_rows, key=lambda row: float(row["nll"]))
     return {
         "lr": lr,
         "weight_decay": weight_decay,
@@ -232,21 +237,28 @@ def main() -> None:
         print("Step 1: learning-rate sweep")
         for lr in LR_SWEEP:
             save_dir = run_training(lr, LR_SWEEP_WD, hess_init, dry_run=args.dry_run)
-            if not args.dry_run:
-                add_row(best_val_metrics(save_dir, lr, LR_SWEEP_WD, hess_init), "lr_sweep")
+            if not args.dry_run and save_dir is not None:
+                metrics = best_val_metrics(save_dir, lr, LR_SWEEP_WD, hess_init)
+                if metrics is not None:
+                    add_row(metrics, "lr_sweep")
 
         if args.dry_run:
             best_lr = "<best_lr_from_step_1>"
         else:
             h0_rows = [r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] == "lr_sweep"]
+            if not h0_rows:
+                print(f"All lr_sweep runs failed for h0={hess_init}, skipping.")
+                continue
             best_lr = str(min(h0_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
             print(f"Best learning rate from step 1 (h0={hess_init}): {best_lr}")
 
         print("Step 2: weight-decay sweep")
         for weight_decay in WD_SWEEP:
             save_dir = run_training(best_lr, weight_decay, hess_init, dry_run=args.dry_run)
-            if not args.dry_run:
-                add_row(best_val_metrics(save_dir, best_lr, weight_decay, hess_init), "wd_sweep")
+            if not args.dry_run and save_dir is not None:
+                metrics = best_val_metrics(save_dir, best_lr, weight_decay, hess_init)
+                if metrics is not None:
+                    add_row(metrics, "wd_sweep")
 
     if args.dry_run:
         return
