@@ -31,9 +31,9 @@ DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 SEEDS = ["0", "1", "2"]
 
 # --- Fill in best values from tuning ---
-LR = "1e-3"
-WD = "1e-4"
-HESS_INIT = "1.0"
+LR = "1e-2"
+WD = "2e-3"
+HESS_INIT = "0.5"
 BETA1 = "0.9"
 BETA2 = "0.99999"
 BETA3 = "0.999"
@@ -42,7 +42,7 @@ CLIP_RADIUS = "inf"
 RESCALE_LR = False
 # ---------------------------------------
 
-GAMMA_SWEEP = ["1.001", "1.005", "1.01", "1.05", "1.1", "1.2", "1.5", "2.0"]
+GAMMA_SWEEP = ["1.0001", "1.001", "1.01", "1.1", "1.5", "2.0"]
 
 
 def hyperparam_dir(gamma: str) -> Path:
