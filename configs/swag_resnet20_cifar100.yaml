@@ -1,26 +1,24 @@
-optimizer: laplace
+optimizer: swag
 dataset: cifar100
-model: resnet20
+model: resnet20_swag
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/laplace/cifar100_resnet20/lr_1e-1_wd_2e-4"
+traindir: "final/swag/cifar100_resnet20/lr_5e-2_wd_2e-4"
 
 train_args:
-  lr: "1e-1"
+  lr: "5e-2"
+  lr_final: "1e-2"
   e: "200"
   weight-decay: "2e-4"
-  momentum: "0.9"
+  beta1: "0.9"
+  swag_start: "160"
+  swag_freq: "1"
+  warmup: "0"
   tbatch: "128"
   vbatch: "256"
   tvsplit: "0.9"
   j: "1"
-  prior_precision: "9"
-  subset_of_weights: "last_layer"
-  hessian_structure: "kron"
-  pred_type: "glm"
-  link_approx: "probit"
-  n_samples: "100"
 
 train_flags: []
 
