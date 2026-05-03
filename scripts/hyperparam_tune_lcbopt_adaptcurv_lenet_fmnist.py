@@ -1,12 +1,19 @@
-"""HPC/local lCBOptAdaptCurv tuning sweep for LeNet on Fashion-MNIST.
+"""Two-stage lCBOptAdaptCurv tuning sweep for LeNet on Fashion-MNIST.
 
-For each value in HESS_INIT_SWEEP:
-  1. LR sweep    (fixed wd=WD_DEFAULT, gamma=GAMMA_DEFAULT, beta3=BETA3_DEFAULT)
-  2. WD sweep    (fixed best lr, gamma=GAMMA_DEFAULT, beta3=BETA3_DEFAULT)
-  3. Gamma sweep (fixed best lr, best wd, beta3=BETA3_DEFAULT)
-  4. Beta3 sweep (fixed best lr, best wd, best gamma)
+Stage 1 — gamma/beta3 sweep:
+  Sweep all (gamma, beta3) combinations with h0, lr, wd held fixed.
+  Select the top 3 pairs by best validation NLL.
+  Rows tagged: stage = "gamma_beta3_sweep".
 
-The overall best across all h0 values determines the recommended final config.
+Stage 2 — h0/lr/wd sweep:
+  For each of the top 3 (gamma, beta3) pairs from Stage 1,
+  sweep a small grid of hess_init, learning rate, and weight decay.
+  Select the overall best config by best validation NLL.
+  Rows tagged: stage = "h0_lr_wd_sweep".
+
+Outputs (written to OUTPUT_ROOT/lcbopt_adaptcurv/fmnist_lenet/):
+  tuning_summary.csv          — all Stage 1 + Stage 2 results
+  recommended_final_config.yaml — best config from Stage 2
 """
 
 from __future__ import annotations
@@ -34,17 +41,15 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 
-LR_DEFAULT = "1e-3"
-LR_SWEEP = ["1e-1", "5e-2", "1e-2", "5e-3", "1e-3", "5e-4", "1e-4"]
-WD_DEFAULT = "1e-4"
-WD_SWEEP = ["1e-5", "1e-4", "5e-4", "1e-3", "2e-3"]
-HESS_INIT_SWEEP = ["2.0", "1.0", "0.5", "0.1"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
-BETA3_DEFAULT = "0.999"
-GAMMA_DEFAULT = "1.05"
 EPS = "1e-8"
 CLIP_RADIUS = "inf"
+
+# Stage 1: fixed values while sweeping gamma x beta3
+H0_DEFAULT = "1.0"
+LR_DEFAULT = "1e-3"
+WD_DEFAULT = "1e-4"
 
 GAMMA_SWEEP = [
     "1.001",
@@ -65,8 +70,21 @@ BETA3_SWEEP = [
     "0.99999",
 ]
 
+# Stage 2: small grids swept for each top-3 (gamma, beta3) pair
+TOP_K = 3
+H0_STAGE2 = ["2.0", "1.0", "0.5"]
+LR_STAGE2 = ["5e-2", "1e-2", "5e-3", "1e-3"]
+WD_STAGE2 = ["1e-5", "1e-4", "1e-3"]
 
-def run_dir(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT, epochs: str = EPOCHS) -> Path:
+
+def run_dir(
+    gamma: str,
+    beta3: str,
+    hess_init: str,
+    weight_decay: str = WD_DEFAULT,
+    lr: str = LR_DEFAULT,
+    epochs: str = EPOCHS,
+) -> Path:
     return (
         OUTPUT_ROOT
         / OPTIMIZER
@@ -86,7 +104,14 @@ def completed_val_csv(val_csv: Path, epochs: str = EPOCHS) -> bool:
         return False
 
 
-def train_command(gamma: str, beta3: str, hess_init: str, save_dir: Path, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT) -> list[str]:
+def train_command(
+    gamma: str,
+    beta3: str,
+    hess_init: str,
+    save_dir: Path,
+    weight_decay: str = WD_DEFAULT,
+    lr: str = LR_DEFAULT,
+) -> list[str]:
     return [
         sys.executable,
         "-u",
@@ -94,50 +119,39 @@ def train_command(gamma: str, beta3: str, hess_init: str, save_dir: Path, weight
         "experiments.train_lcbopt_adaptcurv",
         MODEL,
         DATASET,
-        "-s",
-        SEED,
-        "-d",
-        DEVICE,
-        "-dd",
-        str(DATA_DIR),
-        "-sd",
-        str(save_dir),
-        "-lr",
-        lr,
-        "--wd",
-        weight_decay,
-        "--hess_init",
-        hess_init,
-        "--gamma",
-        gamma,
-        "--beta1",
-        BETA1,
-        "--beta2",
-        BETA2,
-        "--beta3",
-        beta3,
-        "--eps",
-        EPS,
-        "--clip-radius",
-        CLIP_RADIUS,
-        "-e",
-        EPOCHS,
-        "-tb",
-        BATCH,
-        "-vb",
-        VAL_BATCH,
-        "-sp",
-        TVSPLIT,
-        "-j",
-        WORKERS,
+        "-s", SEED,
+        "-d", DEVICE,
+        "-dd", str(DATA_DIR),
+        "-sd", str(save_dir),
+        "-lr", lr,
+        "--wd", weight_decay,
+        "--hess_init", hess_init,
+        "--gamma", gamma,
+        "--beta1", BETA1,
+        "--beta2", BETA2,
+        "--beta3", beta3,
+        "--eps", EPS,
+        "--clip-radius", CLIP_RADIUS,
+        "-e", EPOCHS,
+        "-tb", BATCH,
+        "-vb", VAL_BATCH,
+        "-sp", TVSPLIT,
+        "-j", WORKERS,
     ]
 
 
-def run_training(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT, dry_run: bool = False) -> Path:
+def run_training(
+    gamma: str,
+    beta3: str,
+    hess_init: str,
+    weight_decay: str = WD_DEFAULT,
+    lr: str = LR_DEFAULT,
+    dry_run: bool = False,
+) -> Path:
     save_dir = run_dir(gamma, beta3, hess_init, weight_decay, lr)
     val_csv = save_dir / "val.csv"
-
     cmd = train_command(gamma, beta3, hess_init, save_dir, weight_decay, lr)
+
     if dry_run:
         print(" ".join(cmd))
         return save_dir
@@ -149,26 +163,26 @@ def run_training(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_
         print(f"Skipping completed run: {save_dir}")
         return save_dir
 
-    print(f"Running lr={lr}, wd={weight_decay}, gamma={gamma}, beta3={beta3}, hess_init={hess_init}")
+    print(f"Running lr={lr}, wd={weight_decay}, h0={hess_init}, gamma={gamma}, beta3={beta3}")
     with (save_dir / "stdout.log").open("w", encoding="utf-8") as log:
         result = subprocess.run(
-            cmd,
-            cwd=ROOT,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=False,
+            cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, text=True, check=False,
         )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Training failed for lr={lr}, wd={weight_decay}, gamma={gamma}, beta3={beta3}, "
-            f"hess_init={hess_init}. See {save_dir / 'stdout.log'}"
+            f"Training failed for lr={lr}, wd={weight_decay}, h0={hess_init}, "
+            f"gamma={gamma}, beta3={beta3}. See {save_dir / 'stdout.log'}"
         )
     return save_dir
 
 
 def best_val_metrics(
-    save_dir: Path, gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT
+    save_dir: Path,
+    gamma: str,
+    beta3: str,
+    hess_init: str,
+    weight_decay: str = WD_DEFAULT,
+    lr: str = LR_DEFAULT,
 ) -> dict[str, str | float | int]:
     val_csv = save_dir / "val.csv"
     if not val_csv.exists():
@@ -211,7 +225,8 @@ def markdown_table(rows: list[dict[str, str | float | int]]) -> str:
 
 
 def write_summary(
-    rows: list[dict[str, str | float | int]], best: dict[str, str | float | int]
+    rows: list[dict[str, str | float | int]],
+    best: dict[str, str | float | int],
 ) -> None:
     summary_dir = OUTPUT_ROOT / OPTIMIZER / f"{DATASET}_{MODEL}"
     summary_dir.mkdir(parents=True, exist_ok=True)
@@ -220,6 +235,7 @@ def write_summary(
         writer = csv.DictWriter(
             f,
             fieldnames=[
+                "stage",
                 "lr",
                 "weight_decay",
                 "hess_init",
@@ -232,7 +248,6 @@ def write_summary(
                 "best_val_ece",
                 "epoch",
                 "save_dir",
-                "stage",
             ],
         )
         writer.writeheader()
@@ -262,6 +277,7 @@ def write_summary(
         "  tbatch: \"128\"\n"
         "  vbatch: \"256\"\n"
         f"  j: \"{WORKERS}\"\n"
+        "train_flags: []\n"
     )
     (summary_dir / "recommended_final_config.yaml").write_text(recommendation, encoding="utf-8")
 
@@ -273,102 +289,83 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    rows: list[dict[str, str | float | int]] = []
+    all_rows: list[dict[str, str | float | int]] = []
     seen: set[tuple[str, str, str, str, str]] = set()
 
     def add_row(row: dict[str, str | float | int], stage: str) -> None:
-        key = (str(row["hess_init"]), str(row["lr"]), str(row["weight_decay"]), str(row["gamma"]), str(row["beta3"]))
+        key = (
+            str(row["hess_init"]), str(row["lr"]), str(row["weight_decay"]),
+            str(row["gamma"]), str(row["beta3"]),
+        )
         if key not in seen:
             seen.add(key)
-            rows.append({**row, "stage": stage})
+            all_rows.append({**row, "stage": stage})
 
-    for hess_init in HESS_INIT_SWEEP:
-        print(f"\n=== hess_init={hess_init} ===")
+    # ------------------------------------------------------------------
+    # Stage 1: sweep gamma x beta3, fixed h0 / lr / wd
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print(f"Stage 1: gamma x beta3 sweep  (h0={H0_DEFAULT}, lr={LR_DEFAULT}, wd={WD_DEFAULT})")
+    print("=" * 60)
 
-        print("Step 1: learning-rate sweep")
-        for lr in LR_SWEEP:
-            save_dir = run_training(GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, WD_DEFAULT, lr, dry_run=args.dry_run)
-            if not args.dry_run:
-                add_row(best_val_metrics(save_dir, GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, WD_DEFAULT, lr), "lr_sweep")
-
-        if args.dry_run:
-            best_lr = "<best_lr_from_step_1>"
-        else:
-            h0_lr_rows = [r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] == "lr_sweep"]
-            best_lr = str(min(h0_lr_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
-            print(f"Best learning rate from step 1 (h0={hess_init}): {best_lr}")
-
-        print("Step 2: weight-decay sweep")
-        for weight_decay in WD_SWEEP:
-            save_dir = run_training(GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, weight_decay, best_lr, dry_run=args.dry_run)
-            if not args.dry_run:
-                add_row(best_val_metrics(save_dir, GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, weight_decay, best_lr), "wd_sweep")
-
-        if args.dry_run:
-            best_wd = "<best_wd_from_step_2>"
-        else:
-            h0_wd_rows = [
-                r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] in ("lr_sweep", "wd_sweep")
-            ]
-            best_row = min(h0_wd_rows, key=lambda r: float(r["best_val_nll"]))
-            best_lr = str(best_row["lr"])
-            best_wd = str(best_row["weight_decay"])
-            print(f"Best config from step 2 (h0={hess_init}): lr={best_lr}, wd={best_wd}")
-
-        print("Step 3: gamma sweep")
-        for gamma in GAMMA_SWEEP:
-            save_dir = run_training(gamma, BETA3_DEFAULT, hess_init, best_wd, best_lr, dry_run=args.dry_run)
-            if not args.dry_run:
-                add_row(best_val_metrics(save_dir, gamma, BETA3_DEFAULT, hess_init, best_wd, best_lr), "gamma_sweep")
-
-        if args.dry_run:
-            best_gamma = "<best_gamma_from_step_3>"
-        else:
-            h0_gamma_rows = [
-                r for r in rows
-                if str(r["hess_init"]) == hess_init and r["stage"] in ("lr_sweep", "wd_sweep", "gamma_sweep")
-            ]
-            best_row = min(h0_gamma_rows, key=lambda r: float(r["best_val_nll"]))
-            best_lr = str(best_row["lr"])
-            best_wd = str(best_row["weight_decay"])
-            best_gamma = str(best_row["gamma"])
-            print(f"Best config from step 3 (h0={hess_init}): lr={best_lr}, wd={best_wd}, gamma={best_gamma}")
-
-        print("Step 4: beta3 sweep")
+    for gamma in GAMMA_SWEEP:
         for beta3 in BETA3_SWEEP:
-            save_dir = run_training(best_gamma, beta3, hess_init, best_wd, best_lr, dry_run=args.dry_run)
+            save_dir = run_training(gamma, beta3, H0_DEFAULT, WD_DEFAULT, LR_DEFAULT, dry_run=args.dry_run)
             if not args.dry_run:
-                add_row(best_val_metrics(save_dir, best_gamma, beta3, hess_init, best_wd, best_lr), "beta3_sweep")
+                add_row(
+                    best_val_metrics(save_dir, gamma, beta3, H0_DEFAULT, WD_DEFAULT, LR_DEFAULT),
+                    "gamma_beta3_sweep",
+                )
 
     if args.dry_run:
+        print("\n[dry-run] Stage 2 would sweep h0/lr/wd for the top-3 (gamma, beta3) pairs.")
         return
 
-    rows = sorted(rows, key=lambda r: float(r["best_val_nll"]))
-    best = rows[0]
-    write_summary(rows, best)
+    stage1_rows = [r for r in all_rows if r["stage"] == "gamma_beta3_sweep"]
+    stage1_sorted = sorted(stage1_rows, key=lambda r: float(r["best_val_nll"]))
+    top_pairs = [(str(r["gamma"]), str(r["beta3"])) for r in stage1_sorted[:TOP_K]]
 
-    print("\nValidation summary (sorted by best val NLL)")
-    print(markdown_table(rows))
-    print("\nSelected best config by validation NLL:")
+    print(f"\nTop {TOP_K} (gamma, beta3) pairs from Stage 1:")
+    for i, (g, b3) in enumerate(top_pairs, 1):
+        nll = stage1_sorted[i - 1]["best_val_nll"]
+        print(f"  {i}. gamma={g}, beta3={b3}  (val NLL={nll:.6f})")
+
+    # ------------------------------------------------------------------
+    # Stage 2: h0 x lr x wd sweep for each top-(gamma, beta3) pair
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("Stage 2: h0 x lr x wd sweep for top-3 (gamma, beta3) pairs")
+    print("=" * 60)
+
+    for gamma, beta3 in top_pairs:
+        print(f"\n  --- gamma={gamma}, beta3={beta3} ---")
+        for hess_init in H0_STAGE2:
+            for lr in LR_STAGE2:
+                for wd in WD_STAGE2:
+                    save_dir = run_training(gamma, beta3, hess_init, wd, lr)
+                    add_row(
+                        best_val_metrics(save_dir, gamma, beta3, hess_init, wd, lr),
+                        "h0_lr_wd_sweep",
+                    )
+
+    stage2_rows = [r for r in all_rows if r["stage"] == "h0_lr_wd_sweep"]
+    best = min(stage2_rows, key=lambda r: float(r["best_val_nll"]))
+    write_summary(all_rows, best)
+
+    print("\n" + "=" * 60)
+    print("Validation summary (sorted by best val NLL)")
+    print("=" * 60)
+    print(markdown_table(all_rows))
+
+    print("\nBest overall config (Stage 2):")
     print(
-        f"lr={best['lr']}, weight-decay={best['weight_decay']}, "
-        f"hess_init={best['hess_init']}, gamma={best['gamma']}, beta3={best['beta3']}"
+        f"  lr={best['lr']}, wd={best['weight_decay']}, h0={best['hess_init']}, "
+        f"gamma={best['gamma']}, beta3={best['beta3']}  "
+        f"(val NLL={best['best_val_nll']:.6f})"
     )
-    print("\nRecommended final lCBOptAdaptCurv run config:")
-    print(f"lr: {best['lr']}")
-    print(f"weight-decay: {best['weight_decay']}")
-    print(f"hess_init: {best['hess_init']}")
-    print(f"gamma: {best['gamma']}")
-    print(f"beta1: {BETA1}")
-    print(f"beta2: {BETA2}")
-    print(f"beta3: {best['beta3']}")
-    print(f"eps: {EPS}")
-    print(f"clip_radius: {CLIP_RADIUS}")
-    print("epochs: 100")
-    print("seeds: [0, 1, 2]")
     print(
-        "final output directory pattern: "
-        f"final/lcbopt_adaptcurv/{DATASET}_{MODEL}/"
+        "\nRecommended final output directory:\n"
+        f"  final/lcbopt_adaptcurv/{DATASET}_{MODEL}/"
         f"lr_{best['lr']}_wd_{best['weight_decay']}_h0_{best['hess_init']}"
         f"_gamma_{best['gamma']}_b3_{best['beta3']}_ep_100"
     )

@@ -15,6 +15,7 @@ train_args:
   vbatch: "256"
   tvsplit: "0.9"
   j: "1"
+  prior_precision: "0.54"
   subset_of_weights: "last_layer"
   hessian_structure: "kron"
   pred_type: "glm"

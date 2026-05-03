@@ -3,11 +3,19 @@ import argparse
 import math
 import os
 import sys
+import warnings
 from os.path import join as pjoin
 
 import torch
 import torch.nn.functional as nnf
 from torch.utils.data import Subset, DataLoader
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"gemm_and_bias error: CUBLAS_STATUS_NOT_INITIALIZED.*",
+    category=UserWarning,
+    module=r"torch\.nn\.modules\.linear",
+)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from data.data_utils import corrupt_labels
@@ -102,14 +110,23 @@ def build_optimizer(args, model):
 
 
 def build_scheduler(args, optimizer):
+    t_max = args.swag_start if args.optimizer == "swag" else args.epochs
+    cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, eta_min=args.lr_final, T_max=t_max
+    )
     if args.warmup > 0:
-        return torch.optim.lr_scheduler.LinearLR(
+        warmup_sched = torch.optim.lr_scheduler.LinearLR(
             optimizer,
             start_factor=1.0 / args.warmup,
             end_factor=1.0,
             total_iters=args.warmup,
         )
-    return None
+        return torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_sched, cosine],
+            milestones=[args.warmup],
+        )
+    return cosine
 
 
 if __name__ == "__main__":
@@ -223,18 +240,13 @@ if __name__ == "__main__":
         _trainbatch = do_trainbatch
 
     for e in range(startepoch, args.epochs):
-        if args.warmup > 0 and e == args.warmup:
-            print("End of warmup epochs, starting cosine annealing")
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, eta_min=args.lr_final, T_max=args.epochs
-            )
-
         model.train()
         log_ece.send((e, "train", len(train_loader), None))
         do_epoch(train_loader, _trainbatch, log_ece, device, model=model, optimizer=optimizer)
         log_ece.throw(StopIteration)
 
-        if scheduler is not None:
+        swag_phase = args.optimizer == "swag" and e >= args.swag_start
+        if scheduler is not None and not swag_phase:
             scheduler.step()
 
         should_collect_swag = (
@@ -319,4 +331,3 @@ if __name__ == "__main__":
 
     log_ece.close()
     print(f">>> Training completed at {next(timer)[0].isoformat()} <<<\n")
-

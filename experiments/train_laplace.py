@@ -3,6 +3,7 @@ import argparse
 import math
 import os
 import sys
+import warnings
 from os.path import join as pjoin
 
 import torch
@@ -10,6 +11,13 @@ import torch.nn.functional as nnf
 from torch.optim import SGD
 from torch.utils.data import DataLoader, Subset
 from laplace import Laplace
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"gemm_and_bias error: CUBLAS_STATUS_NOT_INITIALIZED.*",
+    category=UserWarning,
+    module=r"torch\.nn\.modules\.linear",
+)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from data.data_utils import corrupt_labels
@@ -330,4 +338,3 @@ if __name__ == "__main__":
 
     log_la.close()
     print(f">>> Training completed at {next(timer)[0].isoformat()} <<<\n")
-
