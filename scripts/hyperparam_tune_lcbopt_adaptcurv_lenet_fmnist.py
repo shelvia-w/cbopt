@@ -47,17 +47,18 @@ EPS = "1e-8"
 CLIP_RADIUS = "inf"
 
 # Stage 1: fixed values while sweeping gamma x beta3
-H0_DEFAULT = "1.0"
-LR_DEFAULT = "1e-3"
-WD_DEFAULT = "1e-4"
+H0_DEFAULT = "0.05"
+LR_DEFAULT = "1e-2"
+WD_DEFAULT = "2e-3"
 
 GAMMA_SWEEP = [
+    "1.0001"
     "1.001",
     "1.005",
     "1.01",
     "1.05",
     "1.1",
-    "1.2",
+    "1.2"
     "1.5",
     "2.0",
 ]
@@ -72,9 +73,9 @@ BETA3_SWEEP = [
 
 # Stage 2: small grids swept for each top-3 (gamma, beta3) pair
 TOP_K = 3
-H0_STAGE2 = ["2.0", "1.0", "0.5"]
-LR_STAGE2 = ["5e-2", "1e-2", "5e-3", "1e-3"]
-WD_STAGE2 = ["1e-5", "1e-4", "1e-3"]
+H0_STAGE2 = ["0.05", "0.1", "0.2"]
+LR_STAGE2 = ["5e-3", "1e-2", "2e-2"]
+WD_STAGE2 = ["5e-4", "2e-3", "5e-3"]
 
 
 def run_dir(
