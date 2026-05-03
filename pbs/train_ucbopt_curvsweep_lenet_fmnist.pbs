@@ -35,4 +35,4 @@ export CBO_DATA_DIR="${CBO_DATA_DIR:-/scratch/$USER/cbo_results/data}"
 export CBO_WORKERS="${CBO_WORKERS:-32}"
 export CBO_DEVICE="${CBO_DEVICE:-cuda}"
 
-python -u "$PBS_O_WORKDIR/scripts/train_ucbopt_curvsweep_lenet_mnist.py"
+python -u "$PBS_O_WORKDIR/scripts/train_ucbopt_curvsweep_lenet_fmnist.py"

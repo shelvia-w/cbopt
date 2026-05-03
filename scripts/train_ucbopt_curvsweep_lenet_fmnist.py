@@ -1,4 +1,4 @@
-"""Full training (100 epochs, seeds 0-2) for uCBOpt / LeNet / MNIST across 6 curvature values.
+"""Full training (100 epochs, seeds 0-2) for uCBOpt / LeNet / Fashion MNIST across 6 curvature values.
 
 Edit LR, WD, and HESS_INIT below to the best values found from hyperparameter tuning
 before running this script.
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRATCH_ROOT = Path("/scratch") / os.environ.get("USER", "USER") / "cbo_results"
 OUTPUT_ROOT = Path(os.environ.get("CBO_OUTPUT_ROOT", SCRATCH_ROOT / "final"))
 DATA_DIR = Path(os.environ.get("CBO_DATA_DIR", OUTPUT_ROOT / "data"))
-DATASET = "mnist"
+DATASET = "fmnist"
 MODEL = "lenet"
 OPTIMIZER = "ucbopt"
 EPOCHS = "100"
@@ -33,13 +33,22 @@ SEEDS = ["0", "1", "2"]
 # --- Fill in best values from tuning ---
 LR = "1e-2"
 WD = "2e-3"
-HESS_INIT = "0.5"
+HESS_INIT = "0.05"
 BETA1 = "0.9"
 BETA2 = "0.99999"
 RESCALE_LR = False
 # ---------------------------------------
 
-CURVATURE_SWEEP = ["1e-6", "1e-5", "1e-4"]
+CURVATURE_SWEEP = [    
+    "1e-7",
+    "2e-7",
+    "5e-7",
+    "8e-7",
+    "2e-6",
+    "5e-6",
+    "8e-6",
+    "1e-5",
+]
 
 
 def hyperparam_dir(cand_curvature: str) -> Path:
