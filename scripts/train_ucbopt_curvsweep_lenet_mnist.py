@@ -39,7 +39,7 @@ BETA2 = "0.99999"
 RESCALE_LR = False
 # ---------------------------------------
 
-CURVATURE_SWEEP = ["0.0", "1e-8", "1e-7", "1e-6", "1e-5", "1e-4"]
+CURVATURE_SWEEP = ["1e-6", "1e-5", "1e-4"]
 
 
 def hyperparam_dir(cand_curvature: str) -> Path:
