@@ -132,7 +132,6 @@ def train_command(
         "--beta3", beta3,
         "--eps", EPS,
         "--clip-radius", CLIP_RADIUS,
-        "--bias-corr",
         "--rescale_lr",
         "-e", EPOCHS,
         "-tb", BATCH,
@@ -280,7 +279,6 @@ def write_summary(
         "  vbatch: \"256\"\n"
         f"  j: \"{WORKERS}\"\n"
         "train_flags:\n"
-        "  - bias_corr\n"
         "  - rescale_lr\n"
     )
     (summary_dir / "recommended_final_config.yaml").write_text(recommendation, encoding="utf-8")
