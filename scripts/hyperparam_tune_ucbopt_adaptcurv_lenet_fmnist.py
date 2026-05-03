@@ -1,9 +1,11 @@
-"""HPC/local three-stage uCBOptAdaptCurv tuning sweep for LeNet on Fashion-MNIST.
+"""HPC/local uCBOptAdaptCurv tuning sweep for LeNet on Fashion-MNIST.
 
-Stages (repeated for each value in HESS_INIT_SWEEP):
-  1. Gamma sweep        (fixed lr=5e-2, wd=1e-4, beta3=0.999)
-  2. Beta3 sweep        (fixed lr, wd, best gamma from stage 1)
-  3. Weight-decay sweep (fixed lr, best gamma, best beta3)
+For each value in HESS_INIT_SWEEP:
+  1. LR sweep       (fixed wd=LR_SWEEP_WD, gamma=GAMMA_DEFAULT, beta3=BETA3_DEFAULT)
+  2. WD sweep       (fixed best lr, gamma=GAMMA_DEFAULT, beta3=BETA3_DEFAULT)
+  3. Gamma sweep    (fixed best lr, best wd, beta3=BETA3_DEFAULT)
+  4. LR re-check    (neighbors of best lr in LR_SWEEP, fixed best wd, best gamma, beta3=BETA3_DEFAULT)
+  5. Beta3 sweep    (fixed best lr, best wd, best gamma)
 
 The overall best across all h0 values determines the recommended final config.
 """
@@ -33,13 +35,16 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 
-LR = "5e-2"
+LR_DEFAULT = "5e-2"
+LR_SWEEP = ["5e-1", "1e-1", "5e-2", "1e-2", "5e-3", "1e-3"]
+LR_SWEEP_WD = "1e-4"
 WD_DEFAULT = "1e-4"
 WD_SWEEP = ["1e-5", "1e-4", "5e-4", "1e-3", "2e-3"]
 HESS_INIT_SWEEP = ["1.0", "0.5", "0.2", "0.1"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
 BETA3_DEFAULT = "0.999"
+GAMMA_DEFAULT = "1e-3"
 EPS = "1e-8"
 CLIP_RADIUS = "inf"
 
@@ -52,11 +57,10 @@ GAMMA_SWEEP = [
     "1e-2",
     "5e-2",
     "1e-1",
-    "4e-1",
+    "2e-1",
 ]
 
 BETA3_SWEEP = [
-    "0.9",
     "0.99",
     "0.999",
     "0.9999",
@@ -64,12 +68,12 @@ BETA3_SWEEP = [
 ]
 
 
-def run_dir(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, epochs: str = EPOCHS) -> Path:
+def run_dir(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT, epochs: str = EPOCHS) -> Path:
     return (
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{weight_decay}_h0_{hess_init}_gamma_{gamma}_b3_{beta3}_ep_{epochs}"
+        / f"lr_{lr}_wd_{weight_decay}_h0_{hess_init}_gamma_{gamma}_b3_{beta3}_ep_{epochs}"
     )
 
 
@@ -84,7 +88,7 @@ def completed_val_csv(val_csv: Path, epochs: str = EPOCHS) -> bool:
         return False
 
 
-def train_command(gamma: str, beta3: str, hess_init: str, save_dir: Path, weight_decay: str = WD_DEFAULT) -> list[str]:
+def train_command(gamma: str, beta3: str, hess_init: str, save_dir: Path, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT) -> list[str]:
     return [
         sys.executable,
         "-u",
@@ -101,7 +105,7 @@ def train_command(gamma: str, beta3: str, hess_init: str, save_dir: Path, weight
         "-sd",
         str(save_dir),
         "-lr",
-        LR,
+        lr,
         "--wd",
         weight_decay,
         "--hess_init",
@@ -133,11 +137,11 @@ def train_command(gamma: str, beta3: str, hess_init: str, save_dir: Path, weight
     ]
 
 
-def run_training(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, dry_run: bool = False) -> Path:
-    save_dir = run_dir(gamma, beta3, hess_init, weight_decay)
+def run_training(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT, dry_run: bool = False) -> Path:
+    save_dir = run_dir(gamma, beta3, hess_init, weight_decay, lr)
     val_csv = save_dir / "val.csv"
 
-    cmd = train_command(gamma, beta3, hess_init, save_dir, weight_decay)
+    cmd = train_command(gamma, beta3, hess_init, save_dir, weight_decay, lr)
     if dry_run:
         print(" ".join(cmd))
         return save_dir
@@ -149,7 +153,7 @@ def run_training(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_
         print(f"Skipping completed run: {save_dir}")
         return save_dir
 
-    print(f"Running gamma={gamma}, beta3={beta3}, hess_init={hess_init}, weight_decay={weight_decay}")
+    print(f"Running lr={lr}, wd={weight_decay}, gamma={gamma}, beta3={beta3}, hess_init={hess_init}")
     with (save_dir / "stdout.log").open("w", encoding="utf-8") as log:
         result = subprocess.run(
             cmd,
@@ -161,14 +165,14 @@ def run_training(gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_
         )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Training failed for gamma={gamma}, beta3={beta3}, hess_init={hess_init}, "
-            f"weight_decay={weight_decay}. See {save_dir / 'stdout.log'}"
+            f"Training failed for lr={lr}, wd={weight_decay}, gamma={gamma}, beta3={beta3}, "
+            f"hess_init={hess_init}. See {save_dir / 'stdout.log'}"
         )
     return save_dir
 
 
 def best_val_metrics(
-    save_dir: Path, gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT
+    save_dir: Path, gamma: str, beta3: str, hess_init: str, weight_decay: str = WD_DEFAULT, lr: str = LR_DEFAULT
 ) -> dict[str, str | float | int]:
     val_csv = save_dir / "val.csv"
     if not val_csv.exists():
@@ -181,7 +185,7 @@ def best_val_metrics(
 
     best = min(rows, key=lambda row: float(row["nll"]))
     return {
-        "lr": LR,
+        "lr": lr,
         "weight_decay": weight_decay,
         "hess_init": hess_init,
         "gamma": gamma,
@@ -269,6 +273,15 @@ def write_summary(
     (summary_dir / "recommended_final_config.yaml").write_text(recommendation, encoding="utf-8")
 
 
+def lr_neighbors(best_lr: str) -> list[str]:
+    """Return best_lr plus its immediate neighbours in LR_SWEEP for a local re-check."""
+    try:
+        idx = LR_SWEEP.index(best_lr)
+    except ValueError:
+        return [best_lr]
+    return LR_SWEEP[max(0, idx - 1) : idx + 2]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -277,10 +290,10 @@ def main() -> None:
     args = parser.parse_args()
 
     rows: list[dict[str, str | float | int]] = []
-    seen: set[tuple[str, str, str, str]] = set()
+    seen: set[tuple[str, str, str, str, str]] = set()
 
     def add_row(row: dict[str, str | float | int], stage: str) -> None:
-        key = (str(row["hess_init"]), str(row["gamma"]), str(row["beta3"]), str(row["weight_decay"]))
+        key = (str(row["hess_init"]), str(row["lr"]), str(row["weight_decay"]), str(row["gamma"]), str(row["beta3"]))
         if key not in seen:
             seen.add(key)
             rows.append({**row, "stage": stage})
@@ -288,45 +301,80 @@ def main() -> None:
     for hess_init in HESS_INIT_SWEEP:
         print(f"\n=== hess_init={hess_init} ===")
 
-        print("Stage 1: gamma sweep")
-        for gamma in GAMMA_SWEEP:
-            save_dir = run_training(gamma, BETA3_DEFAULT, hess_init, dry_run=args.dry_run)
+        print("Step 1: learning-rate sweep")
+        for lr in LR_SWEEP:
+            save_dir = run_training(GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, LR_SWEEP_WD, lr, dry_run=args.dry_run)
             if not args.dry_run:
-                add_row(best_val_metrics(save_dir, gamma, BETA3_DEFAULT, hess_init), "gamma_sweep")
+                add_row(best_val_metrics(save_dir, GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, LR_SWEEP_WD, lr), "lr_sweep")
 
         if args.dry_run:
-            best_gamma = "<best_gamma_from_stage_1>"
+            best_lr = "<best_lr_from_step_1>"
         else:
-            gamma_rows = [
-                r for r in rows
-                if r["stage"] == "gamma_sweep" and str(r["hess_init"]) == hess_init
-            ]
-            best_gamma = str(min(gamma_rows, key=lambda r: float(r["best_val_nll"]))["gamma"])
-            print(f"Best gamma from stage 1 (h0={hess_init}): {best_gamma}")
+            h0_lr_rows = [r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] == "lr_sweep"]
+            best_lr = str(min(h0_lr_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
+            print(f"Best learning rate from step 1 (h0={hess_init}): {best_lr}")
 
-        print("Stage 2: beta3 sweep")
-        for beta3 in BETA3_SWEEP:
-            save_dir = run_training(best_gamma, beta3, hess_init, dry_run=args.dry_run)
-            if not args.dry_run:
-                add_row(best_val_metrics(save_dir, best_gamma, beta3, hess_init), "beta3_sweep")
-
-        if args.dry_run:
-            best_beta3 = "<best_beta3_from_stage_2>"
-        else:
-            beta3_rows = [
-                r for r in rows
-                if r["stage"] in ("gamma_sweep", "beta3_sweep") and str(r["hess_init"]) == hess_init
-            ]
-            best_row = min(beta3_rows, key=lambda r: float(r["best_val_nll"]))
-            best_gamma = str(best_row["gamma"])
-            best_beta3 = str(best_row["beta3"])
-            print(f"Best config from stage 2 (h0={hess_init}): gamma={best_gamma}, beta3={best_beta3}")
-
-        print("Stage 3: weight-decay sweep")
+        print("Step 2: weight-decay sweep")
         for weight_decay in WD_SWEEP:
-            save_dir = run_training(best_gamma, best_beta3, hess_init, weight_decay, dry_run=args.dry_run)
+            save_dir = run_training(GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, weight_decay, best_lr, dry_run=args.dry_run)
             if not args.dry_run:
-                add_row(best_val_metrics(save_dir, best_gamma, best_beta3, hess_init, weight_decay), "wd_sweep")
+                add_row(best_val_metrics(save_dir, GAMMA_DEFAULT, BETA3_DEFAULT, hess_init, weight_decay, best_lr), "wd_sweep")
+
+        if args.dry_run:
+            best_wd = "<best_wd_from_step_2>"
+        else:
+            h0_wd_rows = [
+                r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] in ("lr_sweep", "wd_sweep")
+            ]
+            best_row = min(h0_wd_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr = str(best_row["lr"])
+            best_wd = str(best_row["weight_decay"])
+            print(f"Best config from step 2 (h0={hess_init}): lr={best_lr}, wd={best_wd}")
+
+        print("Step 3: gamma sweep")
+        for gamma in GAMMA_SWEEP:
+            save_dir = run_training(gamma, BETA3_DEFAULT, hess_init, best_wd, best_lr, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, gamma, BETA3_DEFAULT, hess_init, best_wd, best_lr), "gamma_sweep")
+
+        if args.dry_run:
+            best_gamma = "<best_gamma_from_step_3>"
+        else:
+            h0_gamma_rows = [
+                r for r in rows
+                if str(r["hess_init"]) == hess_init and r["stage"] in ("lr_sweep", "wd_sweep", "gamma_sweep")
+            ]
+            best_row = min(h0_gamma_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr = str(best_row["lr"])
+            best_wd = str(best_row["weight_decay"])
+            best_gamma = str(best_row["gamma"])
+            print(f"Best config from step 3 (h0={hess_init}): lr={best_lr}, wd={best_wd}, gamma={best_gamma}")
+
+        print("Step 4: LR re-check around best LR (with best wd and best gamma)")
+        for lr in (lr_neighbors(best_lr) if not args.dry_run else LR_SWEEP):
+            save_dir = run_training(best_gamma, BETA3_DEFAULT, hess_init, best_wd, lr, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, best_gamma, BETA3_DEFAULT, hess_init, best_wd, lr), "lr_recheck")
+
+        if args.dry_run:
+            pass  # best_lr unchanged in dry-run
+        else:
+            h0_recheck_rows = [
+                r for r in rows
+                if str(r["hess_init"]) == hess_init
+                and r["stage"] in ("lr_sweep", "wd_sweep", "gamma_sweep", "lr_recheck")
+            ]
+            best_row = min(h0_recheck_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr = str(best_row["lr"])
+            best_wd = str(best_row["weight_decay"])
+            best_gamma = str(best_row["gamma"])
+            print(f"Best config from step 4 (h0={hess_init}): lr={best_lr}, wd={best_wd}, gamma={best_gamma}")
+
+        print("Step 5: beta3 sweep")
+        for beta3 in BETA3_SWEEP:
+            save_dir = run_training(best_gamma, beta3, hess_init, best_wd, best_lr, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, best_gamma, beta3, hess_init, best_wd, best_lr), "beta3_sweep")
 
     if args.dry_run:
         return

@@ -1,10 +1,12 @@
 """HPC/local uCBOpt tuning sweep for LeNet on Fashion-MNIST.
 
-Stages:
-  1. Learning-rate sweep  (fixed wd=1e-4, cand_curvature=0.0, hess_init=HESS_INIT_DEFAULT)
-  2. Weight-decay sweep   (fixed best lr, cand_curvature=0.0, hess_init=HESS_INIT_DEFAULT)
-  3. Curvature sweep      (fixed best lr and best wd, hess_init=HESS_INIT_DEFAULT)
-  4. hess_init sweep      (fixed best lr, wd, and curvature from stages 1-3)
+For each value in HESS_INIT_SWEEP:
+  1. Learning-rate sweep  (fixed wd=1e-4, cand_curvature=0.0)
+  2. Weight-decay sweep   (fixed best lr, cand_curvature=0.0)
+  3. Curvature sweep      (fixed best lr and best wd)
+  4. LR re-check          (neighbors of best lr in LR_SWEEP, fixed best wd and best curv)
+
+The overall best across all hess_init values determines the recommended config.
 """
 
 from __future__ import annotations
@@ -32,13 +34,12 @@ TVSPLIT = "0.9"
 WORKERS = os.environ.get("CBO_WORKERS", os.environ.get("PBS_NCPUS", "32"))
 DEVICE = os.environ.get("CBO_DEVICE", "cuda")
 
-HESS_INIT_DEFAULT = "0.1"
-HESS_INIT_SWEEP = ["0.1", "0.2", "0.5", "1.0"]
+HESS_INIT_SWEEP = ["0.05", "0.1", "0.5", "1.0"]
 BETA1 = "0.9"
 BETA2 = "0.99999"
-RESCALE_LR = True
+RESCALE_LR = False
 
-LR_SWEEP = ["3.0", "2.0", "1.0", "5e-1", "1e-1", "5e-2", "1e-2"]
+LR_SWEEP = ["5e-1","1e-1", "5e-2", "1e-2", "5e-3", "1e-3"]
 LR_SWEEP_WD = "1e-4"
 LR_SWEEP_CURVATURE = "0.0"
 
@@ -48,9 +49,13 @@ WD_SWEEP_CURVATURE = "0.0"
 CURVATURE_SWEEP = [
     "0.0",
     "1e-8",
+    "5e-8",
     "1e-7",
+    "5e-7",
     "1e-6",
+    "5e-6",
     "1e-5",
+    "5e-5",
     "1e-4",
 ]
 
@@ -245,6 +250,15 @@ def write_summary(
     (summary_dir / "recommended_final_config.yaml").write_text(recommendation, encoding="utf-8")
 
 
+def lr_neighbors(best_lr: str) -> list[str]:
+    """Return best_lr plus its immediate neighbours in LR_SWEEP for a local re-check."""
+    try:
+        idx = LR_SWEEP.index(best_lr)
+    except ValueError:
+        return [best_lr]
+    return LR_SWEEP[max(0, idx - 1) : idx + 2]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -261,64 +275,83 @@ def main() -> None:
             seen.add(key)
             rows.append({**row, "stage": stage})
 
-    print(f"\n=== Stages 1-3: using hess_init={HESS_INIT_DEFAULT} ===")
-
-    print("Stage 1: learning-rate sweep")
-    for lr in LR_SWEEP:
-        save_dir = run_training(lr, LR_SWEEP_WD, HESS_INIT_DEFAULT, LR_SWEEP_CURVATURE, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(best_val_metrics(save_dir, lr, LR_SWEEP_WD, HESS_INIT_DEFAULT, LR_SWEEP_CURVATURE), "lr_sweep")
-
-    if args.dry_run:
-        best_lr = "<best_lr_from_stage_1>"
-    else:
-        lr_rows = [r for r in rows if r["stage"] == "lr_sweep"]
-        best_lr = str(min(lr_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
-        print(f"Best learning rate from stage 1: {best_lr}")
-
-    print("Stage 2: weight-decay sweep")
-    for weight_decay in WD_SWEEP:
-        save_dir = run_training(best_lr, weight_decay, HESS_INIT_DEFAULT, WD_SWEEP_CURVATURE, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(
-                best_val_metrics(save_dir, best_lr, weight_decay, HESS_INIT_DEFAULT, WD_SWEEP_CURVATURE), "wd_sweep"
-            )
-
-    if args.dry_run:
-        best_wd = "<best_wd_from_stage_2>"
-    else:
-        wd_rows = [r for r in rows if r["stage"] in ("lr_sweep", "wd_sweep")]
-        best_row = min(wd_rows, key=lambda r: float(r["best_val_nll"]))
-        best_lr = str(best_row["lr"])
-        best_wd = str(best_row["weight_decay"])
-        print(f"Best config from stage 2: lr={best_lr}, weight-decay={best_wd}")
-
-    print("Stage 3: candidate-curvature sweep")
-    for cand_curvature in CURVATURE_SWEEP:
-        if not args.dry_run and float(cand_curvature) >= float(best_wd):
-            print(f"Skipping cand_curvature={cand_curvature} because it is >= weight_decay={best_wd}")
-            continue
-        save_dir = run_training(best_lr, best_wd, HESS_INIT_DEFAULT, cand_curvature, dry_run=args.dry_run)
-        if not args.dry_run:
-            add_row(
-                best_val_metrics(save_dir, best_lr, best_wd, HESS_INIT_DEFAULT, cand_curvature), "curvature_sweep"
-            )
-
-    if args.dry_run:
-        best_curv = "<best_curv_from_stage_3>"
-    else:
-        curv_rows = [r for r in rows if r["stage"] in ("lr_sweep", "wd_sweep", "curvature_sweep")]
-        best_row = min(curv_rows, key=lambda r: float(r["best_val_nll"]))
-        best_lr = str(best_row["lr"])
-        best_wd = str(best_row["weight_decay"])
-        best_curv = str(best_row["cand_curvature"])
-        print(f"Best config from stage 3: lr={best_lr}, weight-decay={best_wd}, cand_curvature={best_curv}")
-
-    print(f"\n=== Stage 4: hess_init sweep (lr={best_lr}, wd={best_wd}, curv={best_curv}) ===")
     for hess_init in HESS_INIT_SWEEP:
-        save_dir = run_training(best_lr, best_wd, hess_init, best_curv, dry_run=args.dry_run)
+        print(f"\n=== hess_init={hess_init} ===")
+
+        print("Step 1: learning-rate sweep")
+        for lr in LR_SWEEP:
+            save_dir = run_training(lr, LR_SWEEP_WD, hess_init, LR_SWEEP_CURVATURE, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, lr, LR_SWEEP_WD, hess_init, LR_SWEEP_CURVATURE), "lr_sweep")
+
+        if args.dry_run:
+            best_lr = "<best_lr_from_step_1>"
+        else:
+            h0_lr_rows = [r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] == "lr_sweep"]
+            best_lr = str(min(h0_lr_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
+            print(f"Best learning rate from step 1 (h0={hess_init}): {best_lr}")
+
+        print("Step 2: weight-decay sweep")
+        for weight_decay in WD_SWEEP:
+            save_dir = run_training(best_lr, weight_decay, hess_init, WD_SWEEP_CURVATURE, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(
+                    best_val_metrics(save_dir, best_lr, weight_decay, hess_init, WD_SWEEP_CURVATURE), "wd_sweep"
+                )
+
+        if args.dry_run:
+            best_wd = "<best_wd_from_step_2>"
+        else:
+            h0_wd_rows = [
+                r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] in ("lr_sweep", "wd_sweep")
+            ]
+            best_row = min(h0_wd_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr = str(best_row["lr"])
+            best_wd = str(best_row["weight_decay"])
+            print(f"Best config from step 2 (h0={hess_init}): lr={best_lr}, weight-decay={best_wd}")
+
+        print("Step 3: candidate-curvature sweep")
+        for cand_curvature in CURVATURE_SWEEP:
+            if not args.dry_run and float(cand_curvature) >= float(best_wd):
+                print(f"Skipping cand_curvature={cand_curvature} because it is >= weight_decay={best_wd}")
+                continue
+            save_dir = run_training(best_lr, best_wd, hess_init, cand_curvature, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(
+                    best_val_metrics(save_dir, best_lr, best_wd, hess_init, cand_curvature), "curvature_sweep"
+                )
+
+        if args.dry_run:
+            best_curv = "<best_curv_from_step_3>"
+        else:
+            h0_curv_rows = [
+                r for r in rows
+                if str(r["hess_init"]) == hess_init
+                and r["stage"] in ("lr_sweep", "wd_sweep", "curvature_sweep")
+            ]
+            best_row = min(h0_curv_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr = str(best_row["lr"])
+            best_wd = str(best_row["weight_decay"])
+            best_curv = str(best_row["cand_curvature"])
+            print(f"Best config from step 3 (h0={hess_init}): lr={best_lr}, wd={best_wd}, curv={best_curv}")
+
+        print("Step 4: LR re-check around best LR (with best wd and best curv)")
+        for lr in (lr_neighbors(best_lr) if not args.dry_run else LR_SWEEP):
+            save_dir = run_training(lr, best_wd, hess_init, best_curv, dry_run=args.dry_run)
+            if not args.dry_run:
+                add_row(best_val_metrics(save_dir, lr, best_wd, hess_init, best_curv), "lr_recheck")
+
         if not args.dry_run:
-            add_row(best_val_metrics(save_dir, best_lr, best_wd, hess_init, best_curv), "hess_init_sweep")
+            h0_recheck_rows = [
+                r for r in rows
+                if str(r["hess_init"]) == hess_init
+                and r["stage"] in ("lr_sweep", "wd_sweep", "curvature_sweep", "lr_recheck")
+            ]
+            best_row = min(h0_recheck_rows, key=lambda r: float(r["best_val_nll"]))
+            best_lr = str(best_row["lr"])
+            best_wd = str(best_row["weight_decay"])
+            best_curv = str(best_row["cand_curvature"])
+            print(f"Best config from step 4 (h0={hess_init}): lr={best_lr}, wd={best_wd}, curv={best_curv}")
 
     if args.dry_run:
         return
