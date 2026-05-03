@@ -11,6 +11,7 @@ import csv
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -41,13 +42,17 @@ RESCALE_LR = False
 CURVATURE_SWEEP = ["0.0", "1e-8", "1e-7", "1e-6", "1e-5", "1e-4"]
 
 
-def run_dir(cand_curvature: str, seed: str) -> Path:
+def hyperparam_dir(cand_curvature: str) -> Path:
     return (
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_curv_{cand_curvature}_rslr_{RESCALE_LR}_ep_{EPOCHS}_s{seed}"
+        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_curv_{cand_curvature}_rslr_{RESCALE_LR}_ep_{EPOCHS}"
     )
+
+
+def run_dir(cand_curvature: str, seed: str, timestamp: str) -> Path:
+    return hyperparam_dir(cand_curvature) / f"seed={seed}" / timestamp
 
 
 def completed_val_csv(val_csv: Path) -> bool:
@@ -103,38 +108,45 @@ def train_command(cand_curvature: str, seed: str, save_dir: Path) -> list[str]:
     ]
 
 
-def run_training(cand_curvature: str, seed: str, dry_run: bool = False) -> Path:
-    save_dir = run_dir(cand_curvature, seed)
-    val_csv = save_dir / "val.csv"
-
-    cmd = train_command(cand_curvature, seed, save_dir)
-    if dry_run:
-        print(" ".join(cmd))
-        return save_dir
-
+def run_curvature(cand_curvature: str, dry_run: bool = False) -> None:
+    """Launch all seeds for one curvature value in parallel; wait for all to finish."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    save_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-    if completed_val_csv(val_csv):
-        print(f"Skipping completed run: {save_dir}")
-        return save_dir
+    procs: list[tuple[str, subprocess.Popen[str], object]] = []
+    for seed in SEEDS:
+        save_dir = run_dir(cand_curvature, seed, timestamp)
+        val_csv = save_dir / "val.csv"
+        cmd = train_command(cand_curvature, seed, save_dir)
 
-    print(f"Running cand_curvature={cand_curvature}, seed={seed}")
-    with (save_dir / "stdout.log").open("w", encoding="utf-8") as log:
-        result = subprocess.run(
-            cmd,
-            cwd=ROOT,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=False,
-        )
-    if result.returncode != 0:
+        if dry_run:
+            print(" ".join(cmd))
+            continue
+
+        if completed_val_csv(val_csv):
+            print(f"Skipping completed run: {save_dir}")
+            continue
+
+        save_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Launching cand_curvature={cand_curvature}, seed={seed} -> {save_dir}")
+        log = (save_dir / "stdout.log").open("w", encoding="utf-8")
+        proc = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, text=True)
+        procs.append((seed, proc, log))
+
+    failed = []
+    for seed, proc, log in procs:
+        ret = proc.wait()
+        log.close()
+        status = "OK" if ret == 0 else f"FAILED (exit={ret})"
+        print(f"  seed={seed}: {status}", flush=True)
+        if ret != 0:
+            failed.append(seed)
+
+    if failed:
         raise RuntimeError(
-            f"Training failed for cand_curvature={cand_curvature}, seed={seed}. "
-            f"See {save_dir / 'stdout.log'}"
+            f"Training failed for cand_curvature={cand_curvature}, seed(s)={failed}. "
+            f"See stdout.log in each seed subfolder under {hyperparam_dir(cand_curvature)}"
         )
-    return save_dir
 
 
 def main() -> None:
@@ -146,8 +158,7 @@ def main() -> None:
 
     for cand_curvature in CURVATURE_SWEEP:
         print(f"\n=== cand_curvature={cand_curvature} ===")
-        for seed in SEEDS:
-            run_training(cand_curvature, seed, dry_run=args.dry_run)
+        run_curvature(cand_curvature, dry_run=args.dry_run)
 
     if not args.dry_run:
         print("\nAll runs complete.")
