@@ -51,7 +51,7 @@ def hyperparam_dir(cand_curvature: str) -> Path:
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_curv_{cand_curvature}_rslr_{RESCALE_LR}_ep_{EPOCHS}"
+        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_curv_{cand_curvature}_ep_{EPOCHS}"
     )
 
 
