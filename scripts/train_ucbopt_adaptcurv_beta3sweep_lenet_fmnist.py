@@ -39,7 +39,7 @@ BETA1 = "0.9"
 BETA2 = "0.99999"
 EPS = "1e-8"
 CLIP_RADIUS = "inf"
-RESCALE_LR = True
+RESCALE_LR = False
 # ---------------------------------------
 
 BETA3_SWEEP = [

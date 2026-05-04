@@ -8,7 +8,7 @@ from typing import Any, Iterable, Mapping
 import torch
 from torch import nn
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 import models as _models
 
@@ -107,6 +107,13 @@ def loadcheckpoint(fromfile, device=torch.device("cpu"), epochs=200):
         scheduler = LinearLR(optimizer)
     elif schedulername == "CosineAnnealingLR":
         scheduler = CosineAnnealingLR(optimizer, eta_min=0.0, T_max=epochs)
+    elif schedulername == "SequentialLR":
+        # Reconstruct with dummy sub-schedulers; load_state_dict restores all internal
+        # state (including _milestones and each sub-scheduler's state) via __dict__.update.
+        schedulerstates = dic.get("schedulerstates")
+        n = len(schedulerstates["_schedulers"])
+        dummy_scheds = [LinearLR(optimizer) for _ in range(n)]
+        scheduler = SequentialLR(optimizer, schedulers=dummy_scheds, milestones=list(range(1, n)))
     else:
         raise NotImplementedError(f"Unknown scheduler: {schedulername}")
     with warnings.catch_warnings():

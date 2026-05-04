@@ -1,4 +1,4 @@
-"""Four-stage uCBOptAdaptCurv tuning sweep for LeNet on Fashion-MNIST.
+"""Two-stage uCBOptAdaptCurv tuning sweep for LeNet on Fashion-MNIST.
 
 Stage 1 — gamma/beta3 sweep:
   Sweep all (gamma, beta3) combinations with h0, lr, wd held fixed.
@@ -11,19 +11,9 @@ Stage 2 — h0/lr/wd sweep:
   Select the overall best config by best validation NLL.
   Rows tagged: stage = "h0_lr_wd_sweep".
 
-Stage 3 — high-gamma refinement sweep:
-  Using the best beta3 from Stage 2, sweep higher gamma values with
-  a grid of h0, lr, and wd to find if larger gamma improves results.
-  Rows tagged: stage = "gamma_h0_lr_wd_stage3".
-
-Stage 4 — low-LR sanity check:
-  Using the best beta3 from Stage 2, sweep a subset of high gamma values
-  with low learning rates to check whether smaller lr recovers performance.
-  Rows tagged: stage = "low_lr_sanity_stage4".
-
 Outputs (written to OUTPUT_ROOT/ucbopt_adaptcurv/fmnist_lenet/):
-  tuning_summary.csv          — all Stage 1–4 results
-  recommended_final_config.yaml — best config from Stages 2–4
+  tuning_summary.csv          — all Stage 1–2 results
+  recommended_final_config.yaml — best config from Stage 2
 """
 
 from __future__ import annotations
@@ -86,19 +76,6 @@ H0_STAGE2 = ["0.05", "0.1", "0.2"]
 LR_STAGE2 = ["5e-3", "1e-2", "2e-2"]
 WD_STAGE2 = ["5e-4", "2e-3", "5e-3"]
 
-# Stage 3: high-gamma refinement using best beta3 from Stage 2
-GAMMA_STAGE3 = ["5e-1", "7e-1", "9e-1", "9.5e-1"]
-LR_STAGE3 = ["2e-2", "3e-2", "5e-2"]
-WD_STAGE3 = ["1e-5", "1e-4", "5e-4"]
-H0_STAGE3 = ["0.05", "0.1"]
-
-# Stage 4: low-LR sanity check only
-GAMMA_STAGE4 = ["7e-1", "9e-1", "9.5e-1"]
-LR_STAGE4 = ["1e-3", "2e-3"]
-WD_STAGE4 = ["1e-5", "1e-4", "5e-4"]
-H0_STAGE4 = ["0.05", "0.1"]
-
-
 def run_dir(
     gamma: str,
     beta3: str,
@@ -154,7 +131,7 @@ def train_command(
         "--beta3", beta3,
         "--eps", EPS,
         "--clip-radius", CLIP_RADIUS,
-        "--rescale_lr",
+        "--no-rescale_lr",
         "-e", EPOCHS,
         "-tb", BATCH,
         "-vb", VAL_BATCH,
@@ -301,7 +278,7 @@ def write_summary(
         "  vbatch: \"256\"\n"
         f"  j: \"{WORKERS}\"\n"
         "train_flags:\n"
-        "  - rescale_lr\n"
+        "  - --no-rescale_lr\n"
     )
     (summary_dir / "recommended_final_config.yaml").write_text(recommendation, encoding="utf-8")
 
@@ -343,8 +320,6 @@ def main() -> None:
 
     if args.dry_run:
         print("\n[dry-run] Stage 2 would sweep h0/lr/wd for the top-3 (gamma, beta3) pairs.")
-        print("[dry-run] Stage 3 would sweep high-gamma x h0 x lr x wd using best beta3 from Stage 2.")
-        print("[dry-run] Stage 4 would sweep low-LR sanity check using best beta3 from Stage 2.")
         return
 
     stage1_rows = [r for r in all_rows if r["stage"] == "gamma_beta3_sweep"]
@@ -375,64 +350,7 @@ def main() -> None:
                     )
 
     stage2_rows = [r for r in all_rows if r["stage"] == "h0_lr_wd_sweep"]
-    best_stage2 = min(stage2_rows, key=lambda r: float(r["best_val_nll"]))
-    best_gamma = str(best_stage2["gamma"])
-    best_beta3 = str(best_stage2["beta3"])
-
-    print(f"\nBest (gamma, beta3) from Stage 2: gamma={best_gamma}, beta3={best_beta3}"
-          f"  (val NLL={best_stage2['best_val_nll']:.6f})")
-
-    # ------------------------------------------------------------------
-    # Stage 3: high-gamma refinement, fixing best beta3 from Stage 2
-    # ------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print(f"Stage 3: high-gamma x h0 x lr x wd sweep  (beta3={best_beta3})")
-    print("=" * 60)
-
-    for gamma in GAMMA_STAGE3:
-        for hess_init in H0_STAGE3:
-            for lr in LR_STAGE3:
-                for wd in WD_STAGE3:
-                    save_dir = run_training(gamma, best_beta3, hess_init, wd, lr)
-                    add_row(
-                        best_val_metrics(save_dir, gamma, best_beta3, hess_init, wd, lr),
-                        "gamma_h0_lr_wd_stage3",
-                    )
-
-    stage3_rows = [r for r in all_rows if r["stage"] == "gamma_h0_lr_wd_stage3"]
-    best_stage3 = min(stage3_rows, key=lambda r: float(r["best_val_nll"]))
-
-    print(f"\nBest config from Stage 3: gamma={best_stage3['gamma']}, beta3={best_stage3['beta3']}, "
-          f"h0={best_stage3['hess_init']}, lr={best_stage3['lr']}, wd={best_stage3['weight_decay']}"
-          f"  (val NLL={best_stage3['best_val_nll']:.6f})")
-
-    # ------------------------------------------------------------------
-    # Stage 4: low-LR sanity check, fixing best beta3 from Stage 2
-    # ------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print(f"Stage 4: low-LR sanity check  (beta3={best_beta3})")
-    print("=" * 60)
-
-    for gamma in GAMMA_STAGE4:
-        for hess_init in H0_STAGE4:
-            for lr in LR_STAGE4:
-                for wd in WD_STAGE4:
-                    save_dir = run_training(gamma, best_beta3, hess_init, wd, lr)
-                    add_row(
-                        best_val_metrics(save_dir, gamma, best_beta3, hess_init, wd, lr),
-                        "low_lr_sanity_stage4",
-                    )
-
-    stage4_rows = [r for r in all_rows if r["stage"] == "low_lr_sanity_stage4"]
-    best_stage4 = min(stage4_rows, key=lambda r: float(r["best_val_nll"]))
-
-    print(f"\nBest config from Stage 4: gamma={best_stage4['gamma']}, beta3={best_stage4['beta3']}, "
-          f"h0={best_stage4['hess_init']}, lr={best_stage4['lr']}, wd={best_stage4['weight_decay']}"
-          f"  (val NLL={best_stage4['best_val_nll']:.6f})")
-
-    best_overall = min(
-        [best_stage2, best_stage3, best_stage4], key=lambda r: float(r["best_val_nll"])
-    )
+    best_overall = min(stage2_rows, key=lambda r: float(r["best_val_nll"]))
 
     write_summary(all_rows, best_overall)
 
@@ -441,7 +359,7 @@ def main() -> None:
     print("=" * 60)
     print(markdown_table(all_rows))
 
-    print("\nBest overall config (Stages 1–4):")
+    print("\nBest overall config (Stage 2):")
     print(
         f"  lr={best_overall['lr']}, wd={best_overall['weight_decay']}, h0={best_overall['hess_init']}, "
         f"gamma={best_overall['gamma']}, beta3={best_overall['beta3']}  "

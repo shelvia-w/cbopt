@@ -23,7 +23,7 @@ train_args:
   j: "1"
 
 train_flags:
-  - rescale_lr
+  - --no-rescale_lr
 
 seed_start: 0
 seed_end: 2
