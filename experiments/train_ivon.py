@@ -222,7 +222,7 @@ if __name__ == "__main__":
         if args.warmup > 0 and e == args.warmup:
             print("End of warmup epochs, starting cosine annealing")
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, eta_min=args.lr_final, T_max=args.epochs
+                optimizer, eta_min=args.lr_final, T_max=max(args.epochs - args.warmup, 1)
             )
 
         model.train()

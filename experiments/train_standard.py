@@ -118,8 +118,9 @@ def build_optimizer(args, model):
 
 def build_scheduler(args, optimizer):
     t_max = args.swag_start if args.optimizer == "swag" else args.epochs
+    cosine_t_max = max(t_max - args.warmup, 1) if args.warmup > 0 else t_max
     cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, eta_min=args.lr_final, T_max=t_max
+        optimizer, eta_min=args.lr_final, T_max=cosine_t_max
     )
     if args.warmup > 0:
         warmup_sched = torch.optim.lr_scheduler.LinearLR(
