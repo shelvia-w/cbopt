@@ -22,8 +22,7 @@ train_args:
   vbatch: "256"
   j: "1"
 
-train_flags:
-  - --no-rescale_lr
+train_flags: []
 
 seed_start: 0
 seed_end: 2

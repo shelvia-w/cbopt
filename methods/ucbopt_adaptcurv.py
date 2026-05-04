@@ -55,7 +55,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
         eps: float = 1e-8,
         maximize: bool = False,
         clip_radius: float = float("inf"),
-        rescale_lr: bool = True,
+        rescale_lr: bool = False,
     ):
         if lr < 0.0:
             raise ValueError(f"lr must be >= 0, got {lr}")

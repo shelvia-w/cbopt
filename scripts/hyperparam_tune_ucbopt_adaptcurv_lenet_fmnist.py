@@ -53,14 +53,12 @@ WD_DEFAULT = "2e-3"
 
 GAMMA_SWEEP = [
     "0.0",
-    "5e-3",
     "1e-2",
-    "5e-2",
     "1e-1",
-    "2e-1",
     "3e-1",
-    "4e-1",
     "5e-1",
+    "7e-1",
+    "9e-1",
 ]
 
 BETA3_SWEEP = [
@@ -73,7 +71,7 @@ BETA3_SWEEP = [
 # Stage 2: small grids swept for each top-3 (gamma, beta3) pair
 TOP_K = 3
 H0_STAGE2 = ["0.05", "0.1", "0.2"]
-LR_STAGE2 = ["5e-3", "1e-2", "2e-2"]
+LR_STAGE2 = ["1e-3", "2e-3", "1e-2"]
 WD_STAGE2 = ["5e-4", "2e-3", "5e-3"]
 
 def run_dir(
@@ -131,7 +129,6 @@ def train_command(
         "--beta3", beta3,
         "--eps", EPS,
         "--clip-radius", CLIP_RADIUS,
-        "--no-rescale_lr",
         "-e", EPOCHS,
         "-tb", BATCH,
         "-vb", VAL_BATCH,
@@ -277,8 +274,7 @@ def write_summary(
         "  tbatch: \"128\"\n"
         "  vbatch: \"256\"\n"
         f"  j: \"{WORKERS}\"\n"
-        "train_flags:\n"
-        "  - --no-rescale_lr\n"
+        "train_flags: []\n"
     )
     (summary_dir / "recommended_final_config.yaml").write_text(recommendation, encoding="utf-8")
 

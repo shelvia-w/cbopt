@@ -21,7 +21,7 @@ class uCBOpt(torch.optim.Optimizer):
         weight_decay: float = 0.0,   
         cand_curvature: float = 0.0,
         eps: float = 1e-8,
-        rescale_lr: bool = True,
+        rescale_lr: bool = False,
     ):
 
         if lr < 0.0:

@@ -103,7 +103,7 @@ def train_command(gamma: str, seed: str, save_dir: Path) -> list[str]:
         EPS,
         "--clip-radius",
         CLIP_RADIUS,
-        *(["--rescale_lr"] if RESCALE_LR else ["--no-rescale_lr"]),
+        *(["--rescale_lr"] if RESCALE_LR else []),
         "-e",
         EPOCHS,
         "-tb",
