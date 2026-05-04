@@ -12,6 +12,53 @@ from torchvision import datasets
 import torchvision.transforms as transforms
 
 from .data_utils import dup_collate_fn
+from .tinyimagenet import TinyImageNet
+
+
+class KMNISTInfo:
+    outclass = 10
+    split = ("train", "test")
+    count = {"train": 60000, "test": 10000}
+    mean = (0.1918,)
+    std = (0.3483,)
+
+
+def get_kmnist_loader(
+    data_dir: str,
+    workers: int,
+    pin_memory: bool,
+    batch: int,
+    split: str = "test",
+    dups: int = 1,
+):
+    assert split in KMNISTInfo.split
+    kmnist_dir = pjoin(data_dir, "kmnist")
+    normalize = transforms.Normalize(KMNISTInfo.mean, KMNISTInfo.std)
+
+    dataset = datasets.KMNIST(
+        root=kmnist_dir,
+        train=(split == "train"),
+        download=True,
+        transform=transforms.Compose([transforms.ToTensor(), normalize]),
+    )
+
+    loader = (
+        DataLoader(
+            dataset,
+            batch_size=batch,
+            num_workers=workers,
+            pin_memory=pin_memory,
+            collate_fn=dup_collate_fn(dups),
+        )
+        if dups > 1
+        else DataLoader(
+            dataset,
+            batch_size=batch,
+            num_workers=workers,
+            pin_memory=pin_memory,
+        )
+    )
+    return loader
 
 
 class SVHNInfo:
@@ -60,15 +107,15 @@ def get_svhn_loader(
     return loader
 
 
-class Flowers102Info:
-    outclass = 102
-    split = ("train", "val", "test")
-    count = {"train": 1020, "val": 1020, "test": 6149}
-    mean = (0.50390434, 0.4516826, 0.494936)
-    std = (0.23261614, 0.20974728, 0.2668646)
+class TinyImageNetOODInfo:
+    outclass = 200
+    split = ("train", "test")
+    count = {"train": 100000, "test": 10000}
+    mean = (0.48024865984916687, 0.4480723738670349, 0.3975464701652527)
+    std = (0.23022247850894928, 0.22650277614593506, 0.2261698693037033)
 
 
-def get_flowers102_loader(
+def get_tinyimagenet_ood_loader(
     data_dir: str,
     workers: int,
     pin_memory: bool,
@@ -76,13 +123,13 @@ def get_flowers102_loader(
     split: str = "test",
     dups: int = 1,
 ):
-    assert split in Flowers102Info.split
-    flowers102_dir = pjoin(data_dir, "flowers102")
-    normalize = transforms.Normalize(Flowers102Info.mean, Flowers102Info.std)
+    assert split in TinyImageNetOODInfo.split
+    tinyimagenet_dir = pjoin(data_dir, "tinyimagenet")
+    normalize = transforms.Normalize(TinyImageNetOODInfo.mean, TinyImageNetOODInfo.std)
 
-    dataset = datasets.Flowers102(
-        root=flowers102_dir,
-        split=split,
+    dataset = TinyImageNet(
+        root=tinyimagenet_dir,
+        train=(split == "train"),
         download=True,
         transform=transforms.Compose([
             transforms.Resize(32),
@@ -112,8 +159,9 @@ def get_flowers102_loader(
 
 
 OOD_LOADERS = {
+    "kmnist": get_kmnist_loader,
     "svhn": get_svhn_loader,
-    "flowers102": get_flowers102_loader,
+    "tinyimagenet": get_tinyimagenet_ood_loader,
 }
 
 

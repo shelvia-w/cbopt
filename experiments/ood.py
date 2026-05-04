@@ -24,10 +24,14 @@ from core.evaluation import (
     predict_proba_duq, predict_proba_sngp,
 )
 from core.ood import coro_log_ood, confidence_from_prediction_npy
-from data.dataloaders import get_cifar10_test_loader
+from data.dataloaders import (
+    get_fmnist_test_loader, get_cifar10_test_loader, get_cifar100_test_loader,
+    FashionMNISTInfo, CIFAR10Info, CIFAR100Info,
+)
 from data.ood_utils import (
-    get_svhn_loader, get_flowers102_loader, auroc, OODMetrics,
-    SVHNInfo, Flowers102Info,
+    get_kmnist_loader, get_svhn_loader, get_tinyimagenet_ood_loader,
+    auroc, OODMetrics,
+    KMNISTInfo, SVHNInfo, TinyImageNetOODInfo,
 )
 
 try:
@@ -37,8 +41,27 @@ except ImportError:
 
 
 OODInfo = {
+    "kmnist": KMNISTInfo,
     "svhn": SVHNInfo,
-    "flowers102": Flowers102Info,
+    "tinyimagenet": TinyImageNetOODInfo,
+}
+
+INDOMAIN_LOADERS = {
+    "fmnist": get_fmnist_test_loader,
+    "cifar10": get_cifar10_test_loader,
+    "cifar100": get_cifar100_test_loader,
+}
+
+INDOMAIN_INFO = {
+    "fmnist": FashionMNISTInfo,
+    "cifar10": CIFAR10Info,
+    "cifar100": CIFAR100Info,
+}
+
+DEFAULT_OOD = {
+    "fmnist": "kmnist",
+    "cifar10": "svhn",
+    "cifar100": "tinyimagenet",
 }
 
 
@@ -63,7 +86,8 @@ def compute_and_save_metrics(test_folder: str, wamode: str = "", runs=()):
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("traindir", type=str)
-    parser.add_argument("--ood_dataset", default="svhn", choices=OODInfo)
+    parser.add_argument("--indomain_dataset", default="cifar10", choices=INDOMAIN_LOADERS)
+    parser.add_argument("--ood_dataset", default=None, choices=list(OODInfo))
     parser.add_argument("-j", "--workers", default=1, type=int)
     parser.add_argument("-b", "--batch", default=512, type=int)
     parser.add_argument("-ts", "--testsamples", default=1, type=int)
@@ -85,10 +109,13 @@ def get_args():
 
 
 def get_ood_loader(args):
-    if args.ood_dataset == "svhn":
-        return get_svhn_loader(args.data_dir, args.workers, (args.device != "cpu"), args.batch, "test", args.testsamples)
-    elif args.ood_dataset == "flowers102":
-        return get_flowers102_loader(args.data_dir, args.workers, (args.device != "cpu"), args.batch, "test", args.testsamples)
+    ood_dataset = args.ood_dataset or DEFAULT_OOD[args.indomain_dataset]
+    loaders = {
+        "kmnist": get_kmnist_loader,
+        "svhn": get_svhn_loader,
+        "tinyimagenet": get_tinyimagenet_ood_loader,
+    }
+    return loaders[ood_dataset](args.data_dir, args.workers, (args.device != "cpu"), args.batch, "test", args.testsamples)
 
 
 def enable_mc_dropout(model):
@@ -156,9 +183,10 @@ if __name__ == "__main__":
     mkdirp(args.save_dir)
     log_ece = coro_log_ood(None, args.printfreq, args.save_dir)
 
-    indomain_loader = get_cifar10_test_loader(
+    indomain_loader = INDOMAIN_LOADERS[args.indomain_dataset](
         args.data_dir, args.workers, (device != torch.device("cpu")), args.batch, args.testsamples,
     )
+    ood_dataset = args.ood_dataset or DEFAULT_OOD[args.indomain_dataset]
     ood_loader = get_ood_loader(args)
     valid_runs = []
 
@@ -214,12 +242,13 @@ if __name__ == "__main__":
         if la is None and hasattr(optimizer, "mc_samples"):
             optimizer.mc_samples = args.testrepeat
 
-        outclass = 10
+        indomain_info = INDOMAIN_INFO[args.indomain_dataset]
+        outclass = indomain_info.outclass
         print(f">>> Test starts at {next(timer)[0].isoformat()} <<<\n")
 
         # in-domain pass
         outputsaver = (
-            get_outputsaver(args.save_dir, 10000, outclass, f"predictions_indomain_test_{save_name}.npy")
+            get_outputsaver(args.save_dir, indomain_info.counts["test"], outclass, f"predictions_indomain_test_{save_name}.npy")
             if args.saveoutput else None
         )
         log_ece.send((runfolder, "indomain_test", len(indomain_loader), outputsaver))
@@ -231,7 +260,7 @@ if __name__ == "__main__":
 
         # OOD pass
         outputsaver = (
-            get_outputsaver(args.save_dir, OODInfo[args.ood_dataset].count["test"], outclass,
+            get_outputsaver(args.save_dir, OODInfo[ood_dataset].count["test"], outclass,
                             f"predictions_ood_test_{save_name}.npy")
             if args.saveoutput else None
         )
