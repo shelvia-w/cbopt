@@ -12,7 +12,7 @@ train_args:
   e: "100"
   weight-decay: "1e-5"
   beta1: "0.9"
-  swag_start: "80"
+  swag_start: "60"
   swag_freq: "1"
   warmup: "0"
   tbatch: "128"
