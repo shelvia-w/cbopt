@@ -1,6 +1,6 @@
-"""Full training (100 epochs, seeds 0-2) for uCBOptAdaptCurv / LeNet / FashionMNIST across gamma values.
+"""Full training (100 epochs, seeds 0-2) for uCBOptAdaptCurv / LeNet / Fashion-MNIST across beta3 values.
 
-Edit LR, WD, HESS_INIT, and BETA3 below to the best values found from
+Edit LR, WD, HESS_INIT, and GAMMA below to the best values found from
 hyperparameter tuning before running this script.
 """
 
@@ -34,28 +34,34 @@ SEEDS = ["0", "1", "2"]
 LR = "1e-2"
 WD = "2e-3"
 HESS_INIT = "0.5"
+GAMMA = "1e-1"
 BETA1 = "0.9"
 BETA2 = "0.99999"
-BETA3 = "0.99999"
 EPS = "1e-8"
 CLIP_RADIUS = "inf"
 RESCALE_LR = True
 # ---------------------------------------
 
-GAMMA_SWEEP = ["0.0", "1e-4", "1e-3", "1e-2", "1e-1", "2e-1"]
+BETA3_SWEEP = [
+    "1.00001",
+    "1.0001",
+    "1.001",
+    "1.01",
+    "1.1",
+]
 
 
-def hyperparam_dir(gamma: str) -> Path:
+def hyperparam_dir(beta3: str) -> Path:
     return (
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_gamma_{gamma}_b3_{BETA3}_ep_{EPOCHS}"
+        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_gamma_{GAMMA}_b3_{beta3}_ep_{EPOCHS}"
     )
 
 
-def run_dir(gamma: str, seed: str, timestamp: str) -> Path:
-    return hyperparam_dir(gamma) / f"seed={seed}" / timestamp
+def run_dir(beta3: str, seed: str, timestamp: str) -> Path:
+    return hyperparam_dir(beta3) / f"seed={seed}" / timestamp
 
 
 def completed_val_csv(val_csv: Path) -> bool:
@@ -69,7 +75,7 @@ def completed_val_csv(val_csv: Path) -> bool:
         return False
 
 
-def train_command(gamma: str, seed: str, save_dir: Path) -> list[str]:
+def train_command(beta3: str, seed: str, save_dir: Path) -> list[str]:
     return [
         sys.executable,
         "-u",
@@ -92,13 +98,13 @@ def train_command(gamma: str, seed: str, save_dir: Path) -> list[str]:
         "--hess_init",
         HESS_INIT,
         "--gamma",
-        gamma,
+        GAMMA,
         "--beta1",
         BETA1,
         "--beta2",
         BETA2,
         "--beta3",
-        BETA3,
+        beta3,
         "--eps",
         EPS,
         "--clip-radius",
@@ -117,17 +123,17 @@ def train_command(gamma: str, seed: str, save_dir: Path) -> list[str]:
     ]
 
 
-def run_gamma(gamma: str, dry_run: bool = False) -> None:
-    """Launch all seeds for one gamma value in parallel; wait for all to finish."""
+def run_beta3(beta3: str, dry_run: bool = False) -> None:
+    """Launch all seeds for one beta3 value in parallel; wait for all to finish."""
     if not dry_run:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     procs: list[tuple[str, subprocess.Popen[str], object]] = []
     for seed in SEEDS:
-        save_dir = run_dir(gamma, seed, timestamp)
+        save_dir = run_dir(beta3, seed, timestamp)
         val_csv = save_dir / "val.csv"
-        cmd = train_command(gamma, seed, save_dir)
+        cmd = train_command(beta3, seed, save_dir)
 
         if dry_run:
             print(" ".join(cmd))
@@ -138,7 +144,7 @@ def run_gamma(gamma: str, dry_run: bool = False) -> None:
             continue
 
         save_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Launching gamma={gamma}, seed={seed} -> {save_dir}")
+        print(f"Launching beta3={beta3}, seed={seed} -> {save_dir}")
         log = (save_dir / "stdout.log").open("w", encoding="utf-8")
         proc = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, text=True)
         procs.append((seed, proc, log))
@@ -154,8 +160,8 @@ def run_gamma(gamma: str, dry_run: bool = False) -> None:
 
     if failed:
         raise RuntimeError(
-            f"Training failed for gamma={gamma}, seed(s)={failed}. "
-            f"See stdout.log in each seed subfolder under {hyperparam_dir(gamma)}"
+            f"Training failed for beta3={beta3}, seed(s)={failed}. "
+            f"See stdout.log in each seed subfolder under {hyperparam_dir(beta3)}"
         )
 
 
@@ -166,9 +172,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    for gamma in GAMMA_SWEEP:
-        print(f"\n=== gamma={gamma} ===")
-        run_gamma(gamma, dry_run=args.dry_run)
+    for beta3 in BETA3_SWEEP:
+        print(f"\n=== beta3={beta3} ===")
+        run_beta3(beta3, dry_run=args.dry_run)
 
     if not args.dry_run:
         print("\nAll runs complete.")
