@@ -1,4 +1,4 @@
-"""Full training (100 epochs, seeds 0-2) for lCBOptAdaptCurv / LeNet / MNIST across gamma values.
+"""Full training (100 epochs, seeds 0-2) for lCBOptAdaptCurv / LeNet /Fashion MNIST across gamma values.
 
 Edit LR, WD, HESS_INIT, and BETA3 below to the best values found from
 hyperparameter tuning before running this script.
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRATCH_ROOT = Path("/scratch") / os.environ.get("USER", "USER") / "cbo_results"
 OUTPUT_ROOT = Path(os.environ.get("CBO_OUTPUT_ROOT", SCRATCH_ROOT / "final"))
 DATA_DIR = Path(os.environ.get("CBO_DATA_DIR", OUTPUT_ROOT / "data"))
-DATASET = "mnist"
+DATASET = "fmnist"
 MODEL = "lenet"
 OPTIMIZER = "lcbopt_adaptcurv"
 EPOCHS = "100"
