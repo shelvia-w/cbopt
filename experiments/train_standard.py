@@ -81,11 +81,18 @@ def build_optimizer(args, model):
             momentum=args.beta1,
             weight_decay=args.weight_decay,
         )
-    elif args.optimizer in ("adamw", "mcdrop"):
+    elif args.optimizer == "adamw":
         return torch.optim.AdamW(
             model.parameters(),
             lr=args.learning_rate,
             betas=(args.beta1, args.beta2),
+            weight_decay=args.weight_decay,
+        )
+    elif args.optimizer == "mcdrop":
+        return torch.optim.SGD(
+            model.parameters(),
+            lr=args.learning_rate,
+            momentum=args.beta1,
             weight_decay=args.weight_decay,
         )
     elif args.optimizer == "swag":
