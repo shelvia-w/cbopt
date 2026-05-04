@@ -29,7 +29,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
         h_t      = beta2 * h_{t-1} + (1 - beta2) * g_t^2     (not bias-corrected)
         m_t      = beta1 * m_{t-1} + (1 - beta1) * g_t        (bias-corrected)
         h_curv_t = h_t + weight_decay
-        c_t      = min(beta3 * c_{t-1}, h_curv_t)
+        c_t      = min(beta3 * c_{t-1}, h_curv_t)             beta3 > 1 required
         denom    = h_curv_t - gamma * c_t
         numer    = m_t + weight_decay * param
         lr_eff   = lr * (hess_init + weight_decay)  if rescale_lr else lr
@@ -48,7 +48,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
         self,
         params,
         lr: float = 0.01,
-        betas: tuple[float, float, float] = (0.9, 0.999, 0.999),
+        betas: tuple[float, float, float] = (0.9, 0.999, 1.001),
         weight_decay: float = 1e-4,
         hess_init: float = 0.5,
         gamma: float = 0.1,
@@ -64,8 +64,8 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             raise ValueError(f"betas[0] (beta1) must be in [0,1), got {beta1}")
         if not (0.0 <= beta2 < 1.0):
             raise ValueError(f"betas[1] (beta2) must be in [0,1), got {beta2}")
-        if not (0.0 <= beta3 < 1.0):
-            raise ValueError(f"betas[2] (beta3) must be in [0,1), got {beta3}")
+        if not (beta3 > 1.0):
+            raise ValueError(f"betas[2] (beta3) must be > 1 (inflates old min upward so running min can recover), got {beta3}")
         if hess_init <= 0.0:
             raise ValueError(f"hess_init must be > 0, got {hess_init}")
         if weight_decay < 0.0:
