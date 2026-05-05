@@ -34,7 +34,7 @@ SEEDS = ["0", "1", "2"]
 LR = "1e-2"
 WD = "2e-3"
 HESS_INIT = "0.5"
-GAMMA = "1e-1"
+GAMMA = "5e-1"
 BETA1 = "0.9"
 BETA2 = "0.99999"
 EPS = "1e-8"
@@ -45,7 +45,6 @@ RESCALE_LR = False
 BETA3_SWEEP = [
     "1.00001",
     "1.0001",
-    "1.001",
     "1.01",
     "1.1",
 ]

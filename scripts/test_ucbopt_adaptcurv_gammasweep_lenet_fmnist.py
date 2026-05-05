@@ -30,11 +30,20 @@ SEED_END = 2
 # --- Must match values used in training ---
 LR = "1e-2"
 WD = "2e-3"
-HESS_INIT = "0.5"
-BETA3 = "0.99999"
+HESS_INIT = "0.05"
+BETA3 = "1.001"
 # -----------------------------------------
 
-GAMMA_SWEEP = ["0.0", "1e-4", "1e-3", "1e-2", "1e-1", "2e-1"]
+GAMMA_SWEEP = [
+    "0.0",
+    "5e-2",
+    "1e-1",
+    "3e-1",
+    "5e-1",
+    "7e-1",
+    "9e-1",
+    "9.5e-1",
+    "9.9e-1",]
 
 
 def hyperparam_dir(gamma: str) -> Path:
