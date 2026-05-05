@@ -164,6 +164,10 @@ def lenet_swag(outclass: int, input_size: int = 28, max_rank: int = 20) -> SWAG:
     return SWAG(lenet(outclass, input_size), max_rank)
 
 
+def densenet121_swag(outclass: int, input_size: int = 32, max_rank: int = 20) -> SWAG:
+    return SWAG(densenet121(outclass, input_size), max_rank)
+
+
 def preresnet110(outclass: int, input_size: int = 32) -> torch.nn.Module:
     return get_model(
         "preresnet110_frn",
@@ -208,6 +212,10 @@ MCDROPMODELS = {
     "densenet121_mcdrop": densenet121_mcdrop,
 }
 BBBMODELS = {"resnet20_bbb": resnet20_bbb}
-SWAGMODELS = {"resnet20_swag": resnet20_swag, "lenet_swag": lenet_swag}
+SWAGMODELS = {
+    "resnet20_swag": resnet20_swag,
+    "lenet_swag": lenet_swag,
+    "densenet121_swag": densenet121_swag,
+}
 SNGPMODELS = {"resnet20_sngp": resnet20_sngp}
 MODELS = {**STANDARDMODELS, **MCDROPMODELS, **BBBMODELS, **SWAGMODELS, **SNGPMODELS}
