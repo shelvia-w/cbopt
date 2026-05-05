@@ -1,7 +1,7 @@
-.gitnexus
-.vscode
-.claude
-package-lock.json
-AGENTS.md
-CLAUDE.md
-gitnexus.md
+data/
+outputs/
+*.pt
+*.npy
+*.csv
+__pycache__/
+.ipynb_checkpoints/

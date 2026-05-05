@@ -111,6 +111,16 @@ def DenseNet121(num_classes, input_size):
     )
 
 
+def DenseNet101(num_classes, input_size):
+    return DenseNet(
+        Bottleneck,
+        [6, 12, 24, 8],
+        growth_rate=12,
+        num_classes=num_classes,
+        input_size=input_size,
+    )
+
+
 def DenseNet169():
     return DenseNet(Bottleneck, [6, 12, 32, 32], growth_rate=32)
 

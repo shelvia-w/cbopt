@@ -1,4 +1,4 @@
-"""Implementation of the uCBOpt optimizer."""
+"""Implementation of uCBOpt."""
 
 from __future__ import annotations
 

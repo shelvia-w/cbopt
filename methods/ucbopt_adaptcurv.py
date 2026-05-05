@@ -1,9 +1,4 @@
-"""uCBOpt Adaptive Curvature optimizer.
-
-Extends uCBOpt by replacing the fixed scalar curvature with a per-element
-adaptive curvature proxy derived from a decayed running minimum of the
-squared-gradient EMA (exp_avg_sq).
-"""
+"""Implementation of uCBOpt-adapt."""
 
 from __future__ import annotations
 
@@ -17,31 +12,24 @@ ClosureType = Callable[[], Tensor]
 
 
 class uCBOptAdaptCurv(torch.optim.Optimizer):
-    """uCBOpt with an adaptive diagonal curvature proxy.
+    """Upper-CBO optimizer with growing running maximum curvature tracking.
 
     State per parameter tensor:
         step           -- update count
         exp_avg        -- EMA of gradients (m_t)
         exp_avg_sq     -- EMA of squared gradients (h_t), init to hess_init
-        min_exp_avg_sq -- decayed running minimum of exp_avg_sq (c_t), init to +inf
+        min_exp_avg_sq -- growing running minimum of exp_avg_sq (c_t), init to +inf
 
     Update rules:
-        h_t      = beta2 * h_{t-1} + (1 - beta2) * g_t^2     (not bias-corrected)
-        m_t      = beta1 * m_{t-1} + (1 - beta1) * g_t        (bias-corrected)
-        h_curv_t = h_t + weight_decay
-        c_t      = min(beta3 * c_{t-1}, h_curv_t)             beta3 > 1 required
+        h_t      = beta2 * h_{t-1} + (1 - beta2) * g_t^2     
+        m_t      = beta1 * m_{t-1} + (1 - beta1) * g_t        
+        c_t      = min(beta3 * c_{t-1}, h_curv_t)             
         denom    = h_curv_t - gamma * c_t
         numer    = m_t + weight_decay * param
         lr_eff   = lr * (hess_init + weight_decay)  if rescale_lr else lr
         param   -= lr_eff * numer / denom
 
-    Incorporating weight_decay into h_curv means the curvature bound reflects
-    both the squared-gradient EMA and the L2 regularisation curvature.
-    When gamma=0 and rescale_lr=True, denom = h_curv_t = h_t + weight_decay,
-    which reduces to original uCBOpt (given the same lr, beta1, beta2,
-    hess_init, weight_decay).
-    rescale_lr=True uses the same scalar LR rescaling as uCBOpt; the per-element
-    adaptive curvature term (gamma * c_t) is not included in the scalar rescale.
+    Require: beta 3 > 1 and gamma in [0,1).
     """
 
     def __init__(
@@ -70,8 +58,8 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             raise ValueError(f"hess_init must be > 0, got {hess_init}")
         if weight_decay < 0.0:
             raise ValueError(f"weight_decay must be >= 0, got {weight_decay}")
-        if gamma < 0.0:
-            raise ValueError(f"gamma must be >= 0, got {gamma}")
+        if not (0.0 <= gamma < 1.0):
+            raise ValueError(f"gamma must be in [0,1), got {gamma}")
         if eps <= 0.0:
             raise ValueError(f"eps must be > 0, got {eps}")
         if not isinstance(rescale_lr, bool):
@@ -154,7 +142,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             # h_curv_t = h_t + weight_decay
             h_curv = torch._foreach_add(exp_avg_sqs, wd)
 
-            # c_t = min(beta3 * c_{t-1}, h_curv_t)  — decayed running minimum
+            # c_t = min(beta3 * c_{t-1}, h_curv_t)  — growing running minimum
             torch._foreach_mul_(min_exp_avg_sqs, beta3)
             for c, hc in zip(min_exp_avg_sqs, h_curv):
                 torch.minimum(c, hc, out=c)
@@ -167,8 +155,6 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             denom = torch._foreach_add(h_curv, min_exp_avg_sqs, alpha=-gamma)
             torch._foreach_clamp_min_(denom, eps)
 
-            # Coupled weight decay: matches original uCBOpt when gamma=0
-            # and the same beta1, beta2, hess_init, lr, and weight_decay are used.
             numer = torch._foreach_add(m_hat, params_with_grad, alpha=wd)
 
             update = torch._foreach_div(numer, denom)

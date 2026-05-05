@@ -1,7 +1,6 @@
 """Backbone model exports."""
 
+from .frn import FilterResponseNorm
 from .models32 import get_model
-from .frn import FilterResponseNorm, FilterResponseNormLipschitz
-from .grudense import GRUDense
 
-__all__ = ["get_model", "FilterResponseNorm", "FilterResponseNormLipschitz", "GRUDense"]
+__all__ = ["FilterResponseNorm", "get_model"]

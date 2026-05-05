@@ -2,7 +2,6 @@
 
 import numpy as np
 import torch
-from sklearn.metrics import roc_auc_score
 from torch import LongTensor, Tensor
 
 
@@ -50,6 +49,8 @@ class AUROC:
 
     def compute(self) -> float:
         """Compute AUROC, returning `nan` when undefined."""
+        from sklearn.metrics import roc_auc_score
+
         try:
             auroc = roc_auc_score(
                 np.asarray(self.positive), np.asarray(self.confidence)

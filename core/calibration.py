@@ -1,10 +1,6 @@
 """Calibration helpers."""
 
 from typing import Iterable, Tuple, List, Optional
-import matplotlib
-import matplotlib.pyplot as plt
-
-matplotlib.use("pdf")  # for remote machines without GUI
 from .coroutines import autoinitcoroutine
 
 
@@ -92,6 +88,11 @@ def bins2diagram(
     saveas: Optional[str] = None
 ) -> None:
     """Plot and optionally save a reliability diagram from binned predictions."""
+    import matplotlib
+
+    matplotlib.use("pdf")
+    import matplotlib.pyplot as plt
+
     nbin = len(bins[0])
     binvals = [float(i) / nbin for i in range(nbin + 1)]
     accconfs = [

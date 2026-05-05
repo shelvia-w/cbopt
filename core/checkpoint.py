@@ -108,8 +108,6 @@ def loadcheckpoint(fromfile, device=torch.device("cpu"), epochs=200):
     elif schedulername == "CosineAnnealingLR":
         scheduler = CosineAnnealingLR(optimizer, eta_min=0.0, T_max=epochs)
     elif schedulername == "SequentialLR":
-        # Reconstruct with dummy sub-schedulers; load_state_dict restores all internal
-        # state (including _milestones and each sub-scheduler's state) via __dict__.update.
         schedulerstates = dic.get("schedulerstates")
         n = len(schedulerstates["_schedulers"])
         dummy_scheds = [LinearLR(optimizer) for _ in range(n)]

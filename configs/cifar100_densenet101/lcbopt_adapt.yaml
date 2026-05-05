@@ -1,0 +1,15 @@
+dataset: cifar100
+model: densenet101
+method: lcbopt_adapt
+epochs: 200
+batch_size: 128
+eval_batch_size: 512
+learning_rate: 0.001
+lr_final: 0.0
+weight_decay: 0.0005
+warmup_epochs: 5
+random_seed: 0
+data_dir: data
+output_dir: outputs/cifar100_densenet101/lcbopt_adapt/seed0
+evaluation: {indomain: true, ood: true, ood_dataset: tinyimagenet}
+method_hparams: {beta1: 0.9, beta2: 0.99999, beta3: 0.999, hess_init: 1.0, gamma: 1.05, eps: 0.000001, rescale_lr: false}

@@ -1,0 +1,15 @@
+dataset: cifar100
+model: densenet101
+method: ivon
+epochs: 200
+batch_size: 128
+eval_batch_size: 512
+learning_rate: 0.05
+lr_final: 0.0
+weight_decay: 0.0005
+warmup_epochs: 5
+random_seed: 0
+data_dir: data
+output_dir: outputs/cifar100_densenet101/ivon/seed0
+evaluation: {indomain: true, ood: true, ood_dataset: tinyimagenet}
+method_hparams: {beta1: 0.9, beta2: 0.99999, hess_init: 0.5, hess_approx: price, ess: 50000.0, mc_samples: 1, test_repeat: 10}

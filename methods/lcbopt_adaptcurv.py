@@ -1,27 +1,4 @@
-"""lCBOpt Adaptive Curvature optimizer.
-
-Lower-CBO variant with decayed running maximum curvature tracking.
-
-The curvature proxy incorporates weight decay:
-
-    H_t      = exp_avg_sq                      (EMA of squared gradients)
-    H_curv_t = H_t + weight_decay
-    C_t      = max(beta3 * C_{t-1}, H_curv_t)  (decayed running max of H_curv)
-
-    denom = gamma * C_t - H_curv_t + eps
-
-Because C_t >= H_curv_t (the running max is never below the current value),
-denom >= (gamma - 1) * H_curv_t + eps > 0 when gamma > 1.
-
-gamma > 1 is required and enforced in __init__.
-
-This intentionally differs from uCBOptAdaptCurv (upper-CBO), which uses:
-
-    denom = H_curv_t - gamma * C_t
-
-where C_t is a decayed running *minimum*.  Here the roles are reversed:
-C_t is a running *maximum* and the sign in the denominator is flipped.
-"""
+"""Implementation of lCBOpt-adapt."""
 
 from __future__ import annotations
 
@@ -54,8 +31,7 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
         update   = numer / denom
         param   -= lr_eff * update
 
-    gamma > 1 is required (enforced in __init__).
-    lr_eff = lr * (hess_init + weight_decay) if rescale_lr else lr
+    Require: beta3 in [0,1) and gamma > 1.
     """
 
     def __init__(
@@ -165,6 +141,10 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             torch._foreach_mul_(exp_avg_sqs, beta2)
             torch._foreach_add_(exp_avg_sqs, grad_sq, alpha=1.0 - beta2)
 
+            # m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+            torch._foreach_mul_(exp_avgs, beta1)
+            torch._foreach_add_(exp_avgs, grads, alpha=1.0 - beta1)
+            
             # h_curv_t = h_t + weight_decay
             h_curv = torch._foreach_add(exp_avg_sqs, wd)
 
@@ -173,18 +153,11 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             for c, hc in zip(max_exp_avg_sqs, h_curv):
                 torch.maximum(c, hc, out=c)
 
-            # m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
-            torch._foreach_mul_(exp_avgs, beta1)
-            torch._foreach_add_(exp_avgs, grads, alpha=1.0 - beta1)
-
             # bias-correct m only; h is not bias-corrected
             bc_m = [1.0 - beta1 ** t for t in step_counts]
             m_hat = torch._foreach_div(exp_avgs, bc_m)
-
-            # Lower-CBO denominator:
-            #   H_curv_t = h_t + wd,  C_t = max_exp_avg_sq (tracks H_curv)
-            #   denom = gamma * C_t - H_curv_t + eps
-            # C_t >= H_curv_t by construction, so denom >= (gamma-1)*H_curv_t + eps > 0.
+            
+            # denom = gamma * c_t - h_curv_t
             denom = torch._foreach_mul(max_exp_avg_sqs, gamma)
             torch._foreach_add_(denom, h_curv, alpha=-1.0)
             torch._foreach_add_(denom, eps)

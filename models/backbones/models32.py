@@ -4,7 +4,6 @@
 from typing import Tuple
 import torch
 import torch.nn as nn
-from . import vgg_frn
 from . import resnet_frn
 from . import densenet_frn
 from .frn import FilterResponseNorm, FilterResponseNormLipschitz
@@ -449,25 +448,8 @@ def make_preresnet164_frn_fn(data_info, activation=torch.nn.Identity):
     )
 
 
-def make_vgg(data_info, _=None):
-    net = vgg_frn.VGG(
-        "VGG16", data_info["num_classes"], data_info["input_size"]
-    )
-
-    return net
-
-
-def make_resnet18(data_info, _=None):
-    rn = resnet_frn.ResNet18(
-        num_classes=data_info["num_classes"],
-        input_size=data_info["input_size"],
-    )
-
-    return rn
-
-
-def make_densenet121(data_info, _=None):
-    rn = densenet_frn.DenseNet121(
+def make_densenet101(data_info, _=None):
+    rn = densenet_frn.DenseNet101(
         num_classes=data_info["num_classes"],
         input_size=data_info["input_size"],
     )
@@ -479,13 +461,7 @@ def make_densenet121(data_info, _=None):
 def get_model(model_name, data_info, **kwargs):
     _MODEL_FNS = {
         "resnet20_frn": make_resnet20_frn_fn,
-        "preresnet20_frn": make_preresnet20_frn_fn,
-        "preresnet56_frn": make_preresnet56_frn_fn,
-        "preresnet110_frn": make_preresnet110_frn_fn,
-        "preresnet164_frn": make_preresnet164_frn_fn,
-        "vgg16": make_vgg,
-        "resnet18": make_resnet18,
-        "densenet121": make_densenet121,
+        "densenet101": make_densenet101,
     }
     net_fn = _MODEL_FNS[model_name](data_info, **kwargs)
     return net_fn

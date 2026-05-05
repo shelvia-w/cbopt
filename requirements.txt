@@ -18,16 +18,9 @@ torchmetrics==1.9.0
 # Bayesian / curvature / optimizer tools
 ivon-opt==0.1.2
 laplace-torch==0.2.2.2
-backpack-for-pytorch==1.7.1
-bayesian-torch==0.5.0
-curvlinops-for-pytorch==2.0.1
-asdfghjkl==0.1a4
 
-# Experiment tracking / logging
+# Experiment logging
 tensorboard==2.20.0
-wandb==0.24.0
 
 # Datasets / utilities
-datasets==4.5.0
 einops==0.8.1
-tiktoken==0.12.0
