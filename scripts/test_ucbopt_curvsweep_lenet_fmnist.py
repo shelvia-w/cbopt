@@ -83,7 +83,7 @@ def eval_command(cand_curvature: str, save_dir: Path) -> list[str]:
         "--tvsplit",
         "1.0",
         "--checkpoint",
-        "latest",
+        "best",
     ]
 
 
@@ -93,7 +93,7 @@ def eval_curvature(cand_curvature: str, dry_run: bool = False) -> None:
         print(f"Skipping missing traindir: {train_dir}")
         return
 
-    save_dir = train_dir / "eval_final"
+    save_dir = train_dir / "eval"
     cmd = eval_command(cand_curvature, save_dir)
 
     if dry_run:
