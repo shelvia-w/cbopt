@@ -17,11 +17,12 @@ class uCBOpt(torch.optim.Optimizer):
         lr: float = 0.2,
         beta1: float = 0.9,
         beta2: float = 0.99999,
-        hess_init: float = 0.5,         
-        weight_decay: float = 0.0,   
+        hess_init: float = 0.5,
+        weight_decay: float = 0.0,
         cand_curvature: float = 0.0,
         eps: float = 1e-8,
         rescale_lr: bool = False,
+        use_hess_init: bool = True,
     ):
 
         if lr < 0.0:
@@ -30,7 +31,7 @@ class uCBOpt(torch.optim.Optimizer):
             raise ValueError(f"beta1 must be in [0,1), got {beta1}")
         if not (0.0 <= beta2 < 1.0):
             raise ValueError(f"beta2 must be in [0,1), got {beta2}")
-        if hess_init <= 0.0:
+        if use_hess_init and hess_init <= 0.0:
             raise ValueError(f"hess_init must be > 0, got {hess_init}")
         if weight_decay < 0.0:
             raise ValueError(f"weight_decay must be >= 0, got {weight_decay}")
@@ -55,6 +56,7 @@ class uCBOpt(torch.optim.Optimizer):
             cand_curvature=cand_curvature,
             eps=eps,
             rescale_lr=rescale_lr,
+            use_hess_init=use_hess_init,
         )
         super().__init__(params, defaults)
 
@@ -74,7 +76,9 @@ class uCBOpt(torch.optim.Optimizer):
             cand: float = group["cand_curvature"]
             eps: float = group["eps"]
             rescale_lr: bool = group["rescale_lr"]
-            lr_eff = lr_base * (hess_init + wd) if rescale_lr else lr_base
+            use_hess_init: bool = group["use_hess_init"]
+            hi = hess_init if use_hess_init else 0.0
+            lr_eff = lr_base * (hi + wd) if rescale_lr else lr_base
 
             params_with_grad: list[Tensor] = []
             grads: list[Tensor] = []
@@ -95,7 +99,11 @@ class uCBOpt(torch.optim.Optimizer):
                 if len(state) == 0:
                     state["step"] = 0
                     state["m"] = torch.zeros_like(p)
-                    state["v"] = torch.full_like(p, float(hess_init))
+                    state["v"] = (
+                        torch.full_like(p, float(hess_init))
+                        if use_hess_init
+                        else torch.zeros_like(p)
+                    )
 
                 state["step"] += 1
                 step_counts.append(state["step"])

@@ -22,7 +22,8 @@ train_args:
   vbatch: "256"
   j: "1"
 
-train_flags: []
+train_flags:
+  - no_hess_init
 
 seed_start: 0
 seed_end: 2

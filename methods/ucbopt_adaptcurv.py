@@ -56,6 +56,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
         maximize: bool = False,
         clip_radius: float = float("inf"),
         rescale_lr: bool = False,
+        use_hess_init: bool = True,
     ):
         if lr < 0.0:
             raise ValueError(f"lr must be >= 0, got {lr}")
@@ -66,7 +67,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             raise ValueError(f"betas[1] (beta2) must be in [0,1), got {beta2}")
         if not (beta3 > 1.0):
             raise ValueError(f"betas[2] (beta3) must be > 1 (inflates old min upward so running min can recover), got {beta3}")
-        if hess_init <= 0.0:
+        if use_hess_init and hess_init <= 0.0:
             raise ValueError(f"hess_init must be > 0, got {hess_init}")
         if weight_decay < 0.0:
             raise ValueError(f"weight_decay must be >= 0, got {weight_decay}")
@@ -87,6 +88,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             maximize=maximize,
             clip_radius=clip_radius,
             rescale_lr=rescale_lr,
+            use_hess_init=use_hess_init,
         )
         super().__init__(params, defaults)
 
@@ -107,7 +109,9 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             maximize: bool = group["maximize"]
             clip_radius: float = group["clip_radius"]
             rescale_lr: bool = group["rescale_lr"]
-            lr_eff: float = lr * (hess_init + wd) if rescale_lr else lr
+            use_hess_init: bool = group["use_hess_init"]
+            hi = hess_init if use_hess_init else 0.0
+            lr_eff: float = lr * (hi + wd) if rescale_lr else lr
 
             params_with_grad: list[Tensor] = []
             grads: list[Tensor] = []
@@ -129,7 +133,11 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
                 if len(state) == 0:
                     state["step"] = 0
                     state["exp_avg"] = torch.zeros_like(p)
-                    state["exp_avg_sq"] = torch.full_like(p, float(hess_init))
+                    state["exp_avg_sq"] = (
+                        torch.full_like(p, float(hess_init))
+                        if use_hess_init
+                        else torch.zeros_like(p)
+                    )
                     # decayed running minimum of exp_avg_sq; tracks adaptive curvature
                     state["min_exp_avg_sq"] = torch.full_like(p, float("inf"))
 

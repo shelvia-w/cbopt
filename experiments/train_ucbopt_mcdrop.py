@@ -58,6 +58,8 @@ def get_args():
     p.add_argument("--beta1", default=0.9, type=float)
     p.add_argument("--beta2", default=0.99999, type=float)
     p.add_argument("--hess_init", default=0.5, type=float)
+    p.add_argument("--no_hess_init", action="store_true", default=False,
+                   help="initialize exp_avg_sq to 0 instead of hess_init")
     p.add_argument("--cand_curvature", default=4e-6, type=float)
     return p.parse_args()
 
@@ -72,6 +74,7 @@ def build_optimizer(args, model):
         weight_decay=args.weight_decay,
         cand_curvature=args.cand_curvature,
         rescale_lr=args.rescale_lr,
+        use_hess_init=not args.no_hess_init,
     )
 
 
