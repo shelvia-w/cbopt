@@ -1,5 +1,5 @@
 #!/bin/bash
-# Two-stage IVON tuning job for LeNet on Fashion-MNIST.
+# IVON grid-search tuning job for LeNet on Fashion-MNIST.
 # Submit from the project root directory:
 #   qsub pbs/hyperparam_tune_ivon_lenet_fmnist.pbs
 #

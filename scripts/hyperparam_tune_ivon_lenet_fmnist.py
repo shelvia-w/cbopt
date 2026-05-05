@@ -1,7 +1,7 @@
-"""HPC two-stage IVON tuning sweep for LeNet on Fashion-MNIST.
+"""HPC IVON grid-search tuning sweep for LeNet on Fashion-MNIST.
 
-Both stages are run for every value in HESS_INIT_SWEEP; the overall best
-across all h0 values determines the recommended final config.
+Runs every combination of HESS_INIT_SWEEP, LR_SWEEP, and WD_SWEEP; the
+overall best config is selected by validation NLL.
 """
 
 from __future__ import annotations
@@ -35,7 +35,6 @@ TRAIN_SAMPLES = "1"
 RESCALE_LR = True
 LR_SWEEP = ["1e-1", "5e-2", "1e-2"]
 WD_SWEEP = ["5e-4", "1e-3", "2e-3"]
-LR_SWEEP_WD = "1e-4"
 
 
 def run_dir(lr: str, weight_decay: str, hess_init: str, epochs: str = EPOCHS) -> Path:
@@ -98,7 +97,7 @@ def train_command(lr: str, weight_decay: str, hess_init: str, save_dir: Path) ->
     ]
 
 
-def run_training(lr: str, weight_decay: str, hess_init: str, dry_run: bool = False) -> Path:
+def run_training(lr: str, weight_decay: str, hess_init: str, dry_run: bool = False) -> Path | None:
     save_dir = run_dir(lr, weight_decay, hess_init)
     val_csv = save_dir / "val.csv"
 
@@ -233,37 +232,20 @@ def main() -> None:
 
     for hess_init in HESS_INIT_SWEEP:
         print(f"\n=== hess_init={hess_init} ===")
-
-        print("Step 1: learning-rate sweep")
         for lr in LR_SWEEP:
-            save_dir = run_training(lr, LR_SWEEP_WD, hess_init, dry_run=args.dry_run)
-            if not args.dry_run and save_dir is not None:
-                metrics = best_val_metrics(save_dir, lr, LR_SWEEP_WD, hess_init)
-                if metrics is not None:
-                    add_row(metrics, "lr_sweep")
-
-        if args.dry_run:
-            best_lr = "<best_lr_from_step_1>"
-        else:
-            h0_rows = [r for r in rows if str(r["hess_init"]) == hess_init and r["stage"] == "lr_sweep"]
-            if not h0_rows:
-                print(f"All lr_sweep runs failed for h0={hess_init}, skipping.")
-                continue
-            best_lr = str(min(h0_rows, key=lambda r: float(r["best_val_nll"]))["lr"])
-            print(f"Best learning rate from step 1 (h0={hess_init}): {best_lr}")
-
-        print("Step 2: weight-decay sweep")
-        for weight_decay in WD_SWEEP:
-            save_dir = run_training(best_lr, weight_decay, hess_init, dry_run=args.dry_run)
-            if not args.dry_run and save_dir is not None:
-                metrics = best_val_metrics(save_dir, best_lr, weight_decay, hess_init)
-                if metrics is not None:
-                    add_row(metrics, "wd_sweep")
+            for weight_decay in WD_SWEEP:
+                save_dir = run_training(lr, weight_decay, hess_init, dry_run=args.dry_run)
+                if not args.dry_run and save_dir is not None:
+                    metrics = best_val_metrics(save_dir, lr, weight_decay, hess_init)
+                    if metrics is not None:
+                        add_row(metrics, "grid_search")
 
     if args.dry_run:
         return
 
     rows = sorted(rows, key=lambda r: (str(r["hess_init"]), str(r["lr"]), str(r["weight_decay"])))
+    if not rows:
+        raise RuntimeError("No successful IVON tuning runs produced finite validation NLL.")
     best = min(rows, key=lambda r: float(r["best_val_nll"]))
     write_summary(rows, best)
 

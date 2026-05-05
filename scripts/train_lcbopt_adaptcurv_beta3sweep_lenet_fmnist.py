@@ -36,7 +36,7 @@ WD = "2e-3"
 HESS_INIT = "0.1"
 GAMMA = "1.05"
 BETA1 = "0.9"
-BETA2 = "0.99999"
+BETA2 = "0.999"
 EPS = "1e-8"
 CLIP_RADIUS = "inf"
 RESCALE_LR = False
@@ -56,7 +56,7 @@ def hyperparam_dir(beta3: str) -> Path:
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_gamma_{GAMMA}_b3_{beta3}_ep_{EPOCHS}"
+        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_gamma_{GAMMA}_b2_{BETA2}_b3_{beta3}_ep_{EPOCHS}"
     )
 
 
