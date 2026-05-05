@@ -1,13 +1,13 @@
 #!/bin/bash
-# Full lCBOptAdaptCurv gamma sweep (100 epochs, seeds 0-2) for LeNet on MNIST.
+# Full uCBOptAdaptCurv gamma sweep (100 epochs, seeds 0-2) for LeNet on MNIST.
 # Submit from the project root directory:
-#   qsub pbs/train_lcbopt_adaptcurv_gammasweep_lenet_mnist.pbs
+#   qsub pbs/train_ucbopt_adaptcurv_gammasweep_lenet_mnist.pbs
 #
 # Optional overrides:
-#   qsub -v CBO_OUTPUT_ROOT=/scratch/$USER/cbo_results/final pbs/train_lcbopt_adaptcurv_gammasweep_lenet_mnist.pbs
-#   qsub -v CBO_WORKERS=16 pbs/train_lcbopt_adaptcurv_gammasweep_lenet_mnist.pbs
+#   qsub -v CBO_OUTPUT_ROOT=/scratch/$USER/cbo_results/final pbs/train_ucbopt_adaptcurv_gammasweep_lenet_mnist.pbs
+#   qsub -v CBO_WORKERS=16 pbs/train_ucbopt_adaptcurv_gammasweep_lenet_mnist.pbs
 #
-#PBS -N cbo_train_lcbopt_adaptcurv_gammasweep_lenet_mnist
+#PBS -N cbo_train_ucbopt_adaptcurv_gammasweep_lenet_mnist
 #PBS -P gs_spms_jeremie.houssineau
 #PBS -q gpu_h200_caim
 #PBS -l walltime=72:00:00
@@ -35,4 +35,4 @@ export CBO_DATA_DIR="${CBO_DATA_DIR:-/scratch/$USER/cbo_results/data}"
 export CBO_WORKERS="${CBO_WORKERS:-32}"
 export CBO_DEVICE="${CBO_DEVICE:-cuda}"
 
-python -u "$PBS_O_WORKDIR/scripts/train_lcbopt_adaptcurv_gammasweep_lenet_mnist.py"
+python -u "$PBS_O_WORKDIR/scripts/train_ucbopt_adaptcurv_gammasweep_lenet_fmnist.py"
