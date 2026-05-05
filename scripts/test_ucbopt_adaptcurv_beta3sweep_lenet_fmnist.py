@@ -31,12 +31,14 @@ SEED_END = 2
 LR = "1e-2"
 WD = "2e-3"
 HESS_INIT = "0.05"
-GAMMA = "5e-1"
+GAMMA = "9e-1"
+BETA2 = "0.999"
 # -----------------------------------------
 
 BETA3_SWEEP = [
     "1.00001",
     "1.0001",
+    "1.001",
     "1.01",
     "1.1",
 ]
@@ -47,7 +49,7 @@ def hyperparam_dir(beta3: str) -> Path:
         OUTPUT_ROOT
         / OPTIMIZER
         / f"{DATASET}_{MODEL}"
-        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_gamma_{GAMMA}_b3_{beta3}_ep_{EPOCHS}"
+        / f"lr_{LR}_wd_{WD}_h0_{HESS_INIT}_gamma_{GAMMA}_b2_{BETA2}_b3_{beta3}_ep_{EPOCHS}"
     )
 
 
