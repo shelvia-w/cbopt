@@ -33,17 +33,25 @@ SEEDS = ["0", "1", "2"]
 # --- Fill in best values from tuning ---
 LR = "1e-2"
 WD = "2e-3"
-HESS_INIT = "0.5"
+HESS_INIT = "0.05"
 BETA1 = "0.9"
 BETA2 = "0.99999"
-BETA3 = "0.99999"
+BETA3 = "1.001"
 EPS = "1e-8"
 CLIP_RADIUS = "inf"
 RESCALE_LR = False
 # ---------------------------------------
 
-GAMMA_SWEEP = ["0.0", "1e-4", "1e-3", "1e-2", "1e-1", "2e-1"]
-
+GAMMA_SWEEP = [
+    "0.0",
+    "5e-2",
+    "1e-1",
+    "3e-1",
+    "5e-1",
+    "7e-1",
+    "9e-1",
+    "9.5e-1",
+    "9.9e-1",]
 
 def hyperparam_dir(gamma: str) -> Path:
     return (

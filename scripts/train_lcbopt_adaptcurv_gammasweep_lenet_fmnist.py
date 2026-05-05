@@ -43,7 +43,7 @@ RESCALE_LR = False
 # ---------------------------------------
 
 GAMMA_SWEEP = [
-    "1.07",]
+    "1.03",]
 
 
 def hyperparam_dir(gamma: str) -> Path:
