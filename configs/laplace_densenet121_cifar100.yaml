@@ -33,6 +33,7 @@ test_args:
   batch: "256"
   j: "0"
   tr: "64"
+  checkpoint: "best"
 
 test_flags:
   - pd
