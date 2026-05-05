@@ -33,7 +33,7 @@ ESS = "54000"
 HESS_INIT_SWEEP = ["0.05", "0.1", "0.5"]
 TRAIN_SAMPLES = "1"
 RESCALE_LR = True
-LR_SWEEP = ["2e-1", "1e-1", "5e-2", "1e-2"]
+LR_SWEEP = ["5e-3", "2e-1", "1e-1", "5e-2", "1e-2"]
 WD_SWEEP = ["5e-4", "1e-3", "2e-3"]
 
 

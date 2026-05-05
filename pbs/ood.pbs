@@ -1,7 +1,6 @@
 #!/bin/bash
 # Out-of-domain evaluation job. Submit from the project root directory.
-# Usage: qsub -v CONFIG=configs/ucbopt.yaml pbs/ood.pbs
-#        qsub -v CONFIG=configs/ucbopt.yaml,OOD_DATASET=cifar100 pbs/ood.pbs
+# Usage: qsub -v CONFIG=configs/sgd_lenet_fmnist.yaml pbs/ood.pbs
 #
 #PBS -N cbo_ood
 #PBS -P gs_spms_jeremie.houssineau
@@ -23,42 +22,5 @@ conda activate cbo
 set -u
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 
-: "${CONFIG:?Set CONFIG before submitting: qsub -v CONFIG=configs/ucbopt.yaml pbs/ood.pbs}"
-
-DATADIR="/scratch/$USER/cbo_results/data"
-mkdir -p "$DATADIR"
-
-# Read OOD settings from YAML config.
-# OOD_DATASET env var overrides the config default when set at submission time.
-read -r TRAINDIR ood_dataset testsamples testrepeat < <(python3 - \
-  "$PBS_O_WORKDIR/$CONFIG" "${OOD_DATASET:-}" <<'PYEOF'
-import yaml, os, sys
-config_file  = sys.argv[1]
-ood_override = sys.argv[2]
-with open(config_file) as f:
-    c = yaml.safe_load(f)
-scratch     = f"/scratch/{os.environ['USER']}/cbo_results"
-traindir    = f"{scratch}/{c['traindir']}"
-ood_dataset = ood_override or c.get('ood_dataset', 'svhn')
-testsamples = c.get('ood_testsamples', 1)
-testrepeat  = c.get('ood_testrepeat', 64)
-print(traindir, ood_dataset, testsamples, testrepeat)
-PYEOF
-)
-
-savedir="${TRAINDIR}/${ood_dataset}_ood"
-[[ "$testrepeat" -gt 1 ]] && savedir="${savedir}_bayes"
-mkdir -p "$savedir"
-
-cd "$PBS_O_WORKDIR/out_of_domain"
-python -u run.py "$TRAINDIR" \
-  --ood_dataset "$ood_dataset" \
-  -ts "$testsamples" \
-  -tr "$testrepeat" \
-  -dd "$DATADIR" \
-  -sd "$savedir" \
-  -d cuda \
-  -so \
-  |& tee -a "$savedir/stdout.log"
-
-echo "OOD evaluation complete. Saved to: $savedir"
+: "${CONFIG:?Set CONFIG before submitting: qsub -v CONFIG=configs/sgd_lenet_fmnist.yaml pbs/ood.pbs}"
+bash "$PBS_O_WORKDIR/scripts/run_ood.sh" "$PBS_O_WORKDIR/$CONFIG"
