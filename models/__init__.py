@@ -180,6 +180,12 @@ def densenet121(outclass: int, input_size: int = 32) -> torch.nn.Module:
     return get_model("densenet121", data_info={"num_classes": outclass, "input_size": input_size})
 
 
+def densenet121_mcdrop(outclass: int, input_size: int = 32, p: float = 0.05) -> torch.nn.Module:
+    model = densenet121(outclass, input_size)
+    model.linear = nn.Sequential(MCDropout(p), model.linear)
+    return model
+
+
 def gru_dense(vocab_size: int, num_classes: int, padding_idx: int) -> GRUDense:
     return GRUDense(vocab_size, num_classes, padding_idx)
 
@@ -196,7 +202,11 @@ STANDARDMODELS = {
     "densenet121": densenet121,
     "resnet50_imagenet": resnet50_imagenet,
 }
-MCDROPMODELS = {"resnet20_mcdrop": resnet20_mcdrop, "lenet_mcdrop": lenet_mcdrop}
+MCDROPMODELS = {
+    "resnet20_mcdrop": resnet20_mcdrop,
+    "lenet_mcdrop": lenet_mcdrop,
+    "densenet121_mcdrop": densenet121_mcdrop,
+}
 BBBMODELS = {"resnet20_bbb": resnet20_bbb}
 SWAGMODELS = {"resnet20_swag": resnet20_swag, "lenet_swag": lenet_swag}
 SNGPMODELS = {"resnet20_sngp": resnet20_sngp}

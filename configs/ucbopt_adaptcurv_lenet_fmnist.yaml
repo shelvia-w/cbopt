@@ -4,13 +4,13 @@ model: lenet
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/ucbopt_adaptcurv/fmnist_lenet/lr_1e-2_wd_2e-3_h0_0.0_gamma_5e-1_b3_1.001_ep_100"
+traindir: "final/ucbopt_adaptcurv/fmnist_lenet/lr_1e-2_wd_2e-3_h0_0.05_gamma_5e-1_b3_1.001_ep_100"
 
 train_args:
   lr: "1e-2"
   e: "100"
   weight-decay: "2e-3"
-  hess_init: "0.0"
+  hess_init: "0.05"
   gamma: "5e-1"
   beta1: "0.9"
   beta2: "0.99999"
@@ -22,8 +22,7 @@ train_args:
   vbatch: "256"
   j: "1"
 
-train_flags:
-  - no_hess_init
+train_flags: []
 
 seed_start: 0
 seed_end: 2

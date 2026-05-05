@@ -70,7 +70,6 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
         maximize: bool = False,
         clip_radius: float = 1.0,
         rescale_lr: bool = False,
-        use_hess_init: bool = True,
     ):
         if lr < 0.0:
             raise ValueError(f"lr must be >= 0, got {lr}")
@@ -81,7 +80,7 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             raise ValueError(f"betas[1] (beta2) must be in [0,1), got {beta2}")
         if not (0.0 <= beta3 < 1.0):
             raise ValueError(f"betas[2] (beta3) must be in [0,1), got {beta3}")
-        if use_hess_init and hess_init <= 0.0:
+        if hess_init <= 0.0:
             raise ValueError(f"hess_init must be > 0, got {hess_init}")
         if weight_decay < 0.0:
             raise ValueError(f"weight_decay must be >= 0, got {weight_decay}")
@@ -104,7 +103,6 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             maximize=maximize,
             clip_radius=clip_radius,
             rescale_lr=rescale_lr,
-            use_hess_init=use_hess_init,
         )
         super().__init__(params, defaults)
 
@@ -125,9 +123,7 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
             maximize: bool = group["maximize"]
             clip_radius: float = group["clip_radius"]
             rescale_lr: bool = group["rescale_lr"]
-            use_hess_init: bool = group["use_hess_init"]
-            hi = hess_init if use_hess_init else 0.0
-            lr_eff: float = lr * (hi + wd) if rescale_lr else lr
+            lr_eff: float = lr * (hess_init + wd) if rescale_lr else lr
 
             params_with_grad: list[Tensor] = []
             grads: list[Tensor] = []
@@ -151,17 +147,9 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
                 if len(state) == 0:
                     state["step"] = 0
                     state["exp_avg"] = torch.zeros_like(p)
-                    state["exp_avg_sq"] = (
-                        torch.full_like(p, float(hess_init))
-                        if use_hess_init
-                        else torch.zeros_like(p)
-                    )
+                    state["exp_avg_sq"] = torch.full_like(p, float(hess_init))
                     # running max of h_curv = h + wd; init consistent with h_curv
-                    state["max_exp_avg_sq"] = (
-                        torch.full_like(p, float(hess_init) + wd)
-                        if use_hess_init
-                        else torch.full_like(p, wd)
-                    )
+                    state["max_exp_avg_sq"] = torch.full_like(p, float(hess_init) + wd)
 
                 state["step"] += 1
                 step_counts.append(state["step"])
