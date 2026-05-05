@@ -70,9 +70,9 @@ BETA3_SWEEP = [
 
 # Stage 2: small grids swept for each top-3 (gamma, beta3) pair
 TOP_K = 3
-H0_STAGE2 = ["0.05", "0.1", "0.2"]
-LR_STAGE2 = ["1e-3", "2e-3", "1e-2"]
-WD_STAGE2 = ["5e-4", "2e-3", "5e-3"]
+H0_STAGE2 = ["0.05"]
+LR_STAGE2 = ["1e-2", "2e-2", "5e-2", "1e-1"]
+WD_STAGE2 = ["2e-3"]
 
 def run_dir(
     gamma: str,
