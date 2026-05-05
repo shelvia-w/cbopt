@@ -68,7 +68,7 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
         gamma: float = 1.05,
         eps: float = 1e-6,
         maximize: bool = False,
-        clip_radius: float = 1.0,
+        clip_radius: float = float("inf"),
         rescale_lr: bool = False,
     ):
         if lr < 0.0:

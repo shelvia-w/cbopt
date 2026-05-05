@@ -76,6 +76,8 @@ def eval_command(beta3: str, save_dir: Path) -> list[str]:
         WORKERS,
         "--tvsplit",
         "1.0",
+        "--checkpoint",
+        "latest",
     ]
 
 
@@ -85,7 +87,7 @@ def eval_beta3(beta3: str, dry_run: bool = False) -> None:
         print(f"Skipping missing traindir: {train_dir}")
         return
 
-    save_dir = train_dir / "eval"
+    save_dir = train_dir / "eval_final"
     cmd = eval_command(beta3, save_dir)
 
     if dry_run:

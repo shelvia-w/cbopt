@@ -80,6 +80,8 @@ def eval_command(gamma: str, save_dir: Path) -> list[str]:
         WORKERS,
         "--tvsplit",
         "1.0",
+        "--checkpoint",
+        "latest",
     ]
 
 
@@ -89,7 +91,7 @@ def eval_gamma(gamma: str, dry_run: bool = False) -> None:
         print(f"Skipping missing traindir: {train_dir}")
         return
 
-    save_dir = train_dir / "eval"
+    save_dir = train_dir / "eval_final"
     cmd = eval_command(gamma, save_dir)
 
     if dry_run:

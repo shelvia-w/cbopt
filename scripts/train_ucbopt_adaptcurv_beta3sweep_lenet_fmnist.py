@@ -33,7 +33,7 @@ SEEDS = ["0", "1", "2"]
 # --- Fill in best values from tuning ---
 LR = "1e-2"
 WD = "2e-3"
-HESS_INIT = "0.5"
+HESS_INIT = "0.05"
 GAMMA = "5e-1"
 BETA1 = "0.9"
 BETA2 = "0.99999"

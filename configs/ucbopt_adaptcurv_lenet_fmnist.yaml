@@ -26,13 +26,13 @@ train_flags: []
 
 seed_start: 0
 seed_end: 2
-eval_subdir: "eval"
+eval_subdir: "eval_final"
 
 test_args:
   tvsplit: "1.0"
   batch: "256"
   j: "0"
-  checkpoint: "best"
+  checkpoint: "latest"
 
 test_flags:
   - pd

@@ -65,7 +65,7 @@ def get_args():
     p.add_argument("--eps", default=1e-6, type=float)
     p.add_argument("--rescale_lr", action="store_true", default=False,
                    help="scale lr by (hess_init + weight_decay)")
-    p.add_argument("--clip-radius", default=1.0, type=float,
+    p.add_argument("--clip-radius", default=float("inf"), type=float,
                    help="elementwise update clipping radius (inf = disabled)")
     p.add_argument("--maximize", action="store_true", default=False)
 
