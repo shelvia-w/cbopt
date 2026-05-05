@@ -26,7 +26,8 @@ def cumentropy(probas: Tensor) -> float:
 
 def cumnll(probas: Tensor, gts: LongTensor) -> float:
     """Return the summed negative log-likelihood over a batch."""
-    nlls = -torch.log(torch.gather(probas, -1, gts.unsqueeze(-1)).squeeze(-1))
+    true_class_probas = torch.gather(probas, -1, gts.unsqueeze(-1)).squeeze(-1)
+    nlls = -torch.log(true_class_probas.clamp_min(torch.finfo(probas.dtype).tiny))
     return torch.sum(nlls).item()
 
 

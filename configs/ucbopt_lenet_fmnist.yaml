@@ -4,14 +4,14 @@ model: lenet
 seeds: [0, 1, 2]
 device: cuda
 
-traindir: "final/ucbopt/fmnist_lenet/lr_1e-2_wd_2e-3_h0_0.05_curv_0.0_ep_100"
+traindir: "final/ucbopt/fmnist_lenet/lr_1e-2_wd_2e-3_h0_0.05_curv_8e-6_ep_100"
 
 train_args:
   lr: "1e-2"
   e: "100"
   weight-decay: "2e-3"
   hess_init: "0.05"
-  cand_curvature: "0.0"
+  cand_curvature: "8e-6"
   beta1: "0.9"
   beta2: "0.99999"
   tbatch: "128"
