@@ -11,5 +11,5 @@ warmup_epochs: 5
 random_seed: 0
 data_dir: data
 output_dir: outputs/fmnist_lenet/mcdrop/seed0
-evaluation: {indomain: true, ood: true, ood_dataset: kmnist}
+evaluation: {indomain: true, ood: true, ood_dataset: emnist}
 method_hparams: {momentum: 0.9, dropout_p: 0.05, test_repeat: 10}

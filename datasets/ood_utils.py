@@ -14,15 +14,16 @@ from .dataloaders import dup_collate_fn
 from .tinyimagenet import TinyImageNet
 
 
-class KMNISTInfo:
-    outclass = 10
+class EMNISTInfo:
+    outclass = 26
     split = ("train", "test")
-    count = {"train": 60000, "test": 10000}
-    mean = (0.1918,)
-    std = (0.3483,)
+    count = {"train": 124800, "test": 20800}
+    dataset_split = "letters"
+    mean = (0.1736,)
+    std = (0.3317,)
 
 
-def get_kmnist_loader(
+def get_emnist_loader(
     data_dir: str,
     workers: int,
     pin_memory: bool,
@@ -30,12 +31,13 @@ def get_kmnist_loader(
     split: str = "test",
     dups: int = 1,
 ):
-    assert split in KMNISTInfo.split
-    kmnist_dir = pjoin(data_dir, "kmnist")
-    normalize = transforms.Normalize(KMNISTInfo.mean, KMNISTInfo.std)
+    assert split in EMNISTInfo.split
+    emnist_dir = pjoin(data_dir, "emnist")
+    normalize = transforms.Normalize(EMNISTInfo.mean, EMNISTInfo.std)
 
-    dataset = datasets.KMNIST(
-        root=kmnist_dir,
+    dataset = datasets.EMNIST(
+        root=emnist_dir,
+        split=EMNISTInfo.dataset_split,
         train=(split == "train"),
         download=True,
         transform=transforms.Compose([transforms.ToTensor(), normalize]),
@@ -158,7 +160,7 @@ def get_tinyimagenet_ood_loader(
 
 
 OOD_LOADERS = {
-    "kmnist": get_kmnist_loader,
+    "emnist": get_emnist_loader,
     "svhn": get_svhn_loader,
     "tinyimagenet": get_tinyimagenet_ood_loader,
 }

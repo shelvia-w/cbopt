@@ -11,5 +11,5 @@ warmup_epochs: 5
 random_seed: 0
 data_dir: data
 output_dir: outputs/fmnist_lenet/ivon/seed0
-evaluation: {indomain: true, ood: true, ood_dataset: kmnist}
+evaluation: {indomain: true, ood: true, ood_dataset: emnist}
 method_hparams: {beta1: 0.9, beta2: 0.99999, hess_init: 0.5, hess_approx: price, ess: 50000.0, mc_samples: 1, test_repeat: 10}

@@ -11,5 +11,5 @@ warmup_epochs: 5
 random_seed: 0
 data_dir: data
 output_dir: outputs/fmnist_lenet/ucbopt_adapt/seed0
-evaluation: {indomain: true, ood: true, ood_dataset: kmnist}
+evaluation: {indomain: true, ood: true, ood_dataset: emnist}
 method_hparams: {beta1: 0.9, beta2: 0.999, beta3: 1.001, hess_init: 0.5, gamma: 0.1, eps: 0.00000001, rescale_lr: false}

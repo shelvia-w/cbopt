@@ -13,7 +13,7 @@ In-domain:
 
 OOD:
 
-- KMNIST for Fashion-MNIST
+- EMNIST for Fashion-MNIST
 - SVHN for CIFAR-10
 - TinyImageNet for CIFAR-100
 

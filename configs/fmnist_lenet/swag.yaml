@@ -11,5 +11,5 @@ warmup_epochs: 5
 random_seed: 0
 data_dir: data
 output_dir: outputs/fmnist_lenet/swag/seed0
-evaluation: {indomain: true, ood: true, ood_dataset: kmnist}
+evaluation: {indomain: true, ood: true, ood_dataset: emnist}
 method_hparams: {momentum: 0.9, max_rank: 20, swag_start: 160, swag_freq: 1, model_samples: 10, sample_mode: modelwise}

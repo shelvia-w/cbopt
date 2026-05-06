@@ -22,7 +22,7 @@ from core.logging import coro_log_timed
 from core.ood import coro_log_ood
 from core.utils import check_cuda, deterministic_run, mkdirp
 from datasets.dataloaders import INSIZE, OUTCLASS, TESTDATALOADER, TRAINDATALOADERS
-from datasets.ood_utils import OODMetrics, get_kmnist_loader, get_svhn_loader, get_tinyimagenet_ood_loader
+from datasets.ood_utils import OODMetrics, get_emnist_loader, get_svhn_loader, get_tinyimagenet_ood_loader
 from methods.lcbopt_adaptcurv import lCBOptAdaptCurv
 from methods.ucbopt import uCBOpt
 from methods.ucbopt_adaptcurv import uCBOptAdaptCurv
@@ -49,7 +49,7 @@ METHODS = {
 }
 
 OOD_LOADERS = {
-    "kmnist": get_kmnist_loader,
+    "emnist": get_emnist_loader,
     "svhn": get_svhn_loader,
     "tinyimagenet": get_tinyimagenet_ood_loader,
 }
