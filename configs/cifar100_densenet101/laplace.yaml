@@ -3,13 +3,13 @@ model: densenet101
 method: laplace
 epochs: 200
 batch_size: 128
-eval_batch_size: 512
-learning_rate: 0.05
+eval_batch_size: 256
+learning_rate: 0.1
 lr_final: 0.0
-weight_decay: 0.0005
+weight_decay: 2e-4
 warmup_epochs: 5
 random_seed: 0
 data_dir: data
 output_dir: outputs/cifar100_densenet101/laplace/seed0
 evaluation: {indomain: true, ood: true, ood_dataset: tinyimagenet}
-method_hparams: {momentum: 0.9, subset_of_weights: last_layer, hessian_structure: kron, pred_type: glm, link_approx: probit, prior_precision: 1.0, optimize_prior_precision: true}
+method_hparams: {momentum: 0.9, subset_of_weights: last_layer, hessian_structure: kron, pred_type: glm, link_approx: probit, prior_precision: 9.0}

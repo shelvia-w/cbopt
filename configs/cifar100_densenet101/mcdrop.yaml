@@ -3,13 +3,13 @@ model: densenet101
 method: mcdrop
 epochs: 200
 batch_size: 128
-eval_batch_size: 512
+eval_batch_size: 256
 learning_rate: 0.1
 lr_final: 0.0
-weight_decay: 0.0005
+weight_decay: 2e-4
 warmup_epochs: 5
 random_seed: 0
 data_dir: data
 output_dir: outputs/cifar100_densenet101/mcdrop/seed0
 evaluation: {indomain: true, ood: true, ood_dataset: tinyimagenet}
-method_hparams: {momentum: 0.9, dropout_p: 0.05, test_repeat: 10}
+method_hparams: {momentum: 0.9, dropout_p: 0.05, test_repeat: 64}
