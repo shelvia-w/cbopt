@@ -1,3 +1,5 @@
+# Source: https://github.com/team-approx-bayes/ivon
+
 from math import pow
 from typing import Callable, Optional, Tuple
 from contextlib import contextmanager

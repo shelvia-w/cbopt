@@ -101,9 +101,6 @@ class UnderrepresentationExperiment:
             "x_train": torch.tensor(prepared["x_fit"][train_idx], device=self.device),
             "y_train": torch.tensor(prepared["y_fit"][train_idx], device=self.device),
             "n_train": len(train_idx),
-            "n_common_train": int(np.sum(prepared["y_fit"][train_idx] < threshold)),
-            "n_high_risk_train": int(np.sum(prepared["y_fit"][train_idx] >= threshold)),
-            "n_high_risk_available": len(severe_idx),
         }
 
     def data_loss(self, parameters, data):
@@ -272,35 +269,13 @@ class UnderrepresentationExperiment:
         errors = predictions - targets
         absolute_errors = errors.abs()
         true_high_risk = targets >= data["high_risk_threshold_raw"]
-        predicted_high_risk = predictions >= data["high_risk_threshold_raw"]
-
-        positive_count = max(1, int(true_high_risk.sum().item()))
-        true_positive = int((true_high_risk & predicted_high_risk).sum().item())
-        false_negative = int((true_high_risk & ~predicted_high_risk).sum().item())
-
-        underprediction = torch.clamp(targets - predictions, min=0.0)
-        overprediction = torch.clamp(predictions - targets, min=0.0)
-        asymmetric_cost = self.config["underprediction_cost"] * underprediction + self.config["overprediction_cost"] * overprediction
-
         severe_errors = absolute_errors[true_high_risk]
-        worst_n = max(1, int(np.ceil(0.10 * len(absolute_errors))))
+        if not len(severe_errors):
+            raise ValueError("LT-MAE requires test targets at or above the fit-pool target quantile")
 
         return {
             "Method": method_name,
-            "RMSE": torch.sqrt(errors.square().mean()).item(),
-            "MAE": absolute_errors.mean().item(),
-            "95th error": torch.quantile(absolute_errors, 0.95).item(),
-            "Maximum error": absolute_errors.max().item(),
-            "High-risk recall": true_positive / positive_count,
-            "False-negative rate": false_negative / positive_count,
-            "High-risk MAE": severe_errors.mean().item() if len(severe_errors) else np.nan,
-            "Maximum underprediction": underprediction.max().item(),
-            "Mean underprediction": underprediction.mean().item(),
-            "Asymmetric cost": asymmetric_cost.mean().item(),
-            "Worst-decile MAE": torch.topk(absolute_errors, worst_n).values.mean().item(),
-            "Train size": data["n_train"],
-            "High-risk train count": data["n_high_risk_train"],
-            "High-risk available before removal": data["n_high_risk_available"],
+            "LT-MAE": severe_errors.mean().item(),
         }
 
     def build_data(self, raw_x, raw_y, seed):

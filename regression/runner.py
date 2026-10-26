@@ -12,7 +12,7 @@ import torch
 
 from .data import dataset_digest, load_dataset
 from .reporting import completed_repetitions, load_results, summarize_directory, write_csv
-from .specs import DATASET_NAMES, METHODS, RMSE_COLUMNS, dataset_slug, repetition_seed
+from .specs import DATASET_NAMES, METHODS, METRIC_COLUMNS, dataset_slug, repetition_seed
 
 
 def _write_json(value, path):
@@ -67,7 +67,7 @@ def run(config):
     previous_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch.float64)
     engine = None
-    primary = RMSE_COLUMNS[experiment]
+    primary = METRIC_COLUMNS[experiment]
     try:
         for name in config["datasets"]:
             path = output / f"{dataset_slug(name)}_all_runs.csv"
@@ -106,18 +106,15 @@ def run(config):
                 if set(result["Method"]) != set(METHODS) or len(result) != len(METHODS):
                     raise RuntimeError("A repetition must produce all six methods")
                 if not np.isfinite(result[primary].to_numpy(dtype=float)).all():
-                    raise RuntimeError(f"Nonfinite RMSE in {name}, repetition {repetition}")
+                    raise RuntimeError(f"Nonfinite {primary} in {name}, repetition {repetition}")
                 result["Dataset"], result["Repetition"] = name, repetition
                 result["Experiment seed"] = seed
-                result["Train size"] = data["n_train"]
-                if experiment == "contamination":
-                    result["Contamination type"] = "targeted"
-                    result["Contamination"] = config["parameters"]["contamination_fraction"]
+                result = result[["Dataset", "Repetition", "Experiment seed", "Method", primary]]
                 frame = pd.concat([frame, result], ignore_index=True)
                 frame = frame.drop_duplicates(["Repetition", "Method"], keep="last").sort_values(["Repetition", "Method"])
                 write_csv(frame, path)
                 print(f"{name}: repetition {repetition + 1}/{config['parameters']['n_repetitions']}, "
-                      f"seed={seed}, train={data['n_train']}, best RMSE={result[primary].min():.3f}", flush=True)
+                      f"seed={seed}, train={data['n_train']}, best {primary}={result[primary].min():.3f}", flush=True)
                 del data, fitted, result
                 if device.type == "cuda":
                     torch.cuda.empty_cache()

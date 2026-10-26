@@ -130,10 +130,6 @@ class ContaminationExperiment:
     def regularized_loss(self, parameters, data):
         return self.data_loss(parameters, data) + 0.5 * self.config['prior_precision'] * torch.sum(parameters.square())
 
-    def clean_training_loss(self, parameters, data):
-        residuals = self.network_forward(parameters, data['x_train']) - data['y_train_clean']
-        return 0.5 * torch.mean(residuals.square())
-
     def inverse_softplus(self, value):
         value = torch.as_tensor(value, dtype=torch.get_default_dtype(), device=self.device)
         return torch.log(torch.expm1(value))
@@ -176,10 +172,7 @@ class ContaminationExperiment:
         eigenvalues = torch.linalg.eigvalsh(matrix)
         shift = torch.clamp(self.config['minimum_eigenvalue'] - eigenvalues.min(), min=0.0)
         identity = torch.eye(matrix.shape[0], device=matrix.device, dtype=matrix.dtype)
-        return matrix + (shift + self.config['matrix_damping']) * identity, eigenvalues, float(shift.item())
-
-    def local_surrogate_change(self, gradient, curvature, step):
-        return float((torch.dot(gradient, step) + 0.5 * torch.dot(step, curvature @ step)).item())
+        return matrix + (shift + self.config['matrix_damping']) * identity
 
     def obtain_warm_start(self, initial_parameters, data):
         parameters = initial_parameters.detach().clone().requires_grad_(True)
@@ -192,79 +185,44 @@ class ContaminationExperiment:
         return parameters.detach().clone()
 
     def upper_cbo_update(self, parameters, data):
-        objective, data_gradient, data_hessian = self.data_loss_derivatives(parameters, data)
+        _, data_gradient, data_hessian = self.data_loss_derivatives(parameters, data)
         delta, identity = self.config['prior_precision'], torch.eye(self.n_parameters, device=self.device)
         regularized_gradient, regularized_hessian = data_gradient + delta * parameters, data_hessian + delta * identity
         smallest_eigenvalue = torch.linalg.eigvalsh(regularized_hessian).min().item()
         candidate_precision = max(self.config['upper_precision_floor'], smallest_eigenvalue - self.config['curvature_margin']) if smallest_eigenvalue > self.config['curvature_margin'] else self.config['upper_precision_floor']
         raw_curvature = regularized_hessian - candidate_precision * identity
-        raw_eigenvalues = torch.linalg.eigvalsh(raw_curvature)
-        effective_curvature, _, shift = self.make_positive_definite(raw_curvature)
+        effective_curvature = self.make_positive_definite(raw_curvature)
         step = self.clip_step(self.config['cbo_learning_rate'] * -torch.linalg.solve(effective_curvature, regularized_gradient))
-        return {'step': step, 'gradient': regularized_gradient, 'curvature': effective_curvature,
-                'candidate_precision': candidate_precision,
-                'raw_condition_valid': bool(raw_eigenvalues.min().item() > self.config['minimum_eigenvalue']),
-                'matrix_shift': shift, 'objective': objective.item(),
-                'raw_min_eigenvalue': raw_eigenvalues.min().item(),
-                'raw_max_eigenvalue': raw_eigenvalues.max().item()}
+        return step
 
     def lower_cbo_update(self, parameters, data):
-        objective, data_gradient, data_hessian = self.data_loss_derivatives(parameters, data)
+        _, data_gradient, data_hessian = self.data_loss_derivatives(parameters, data)
         delta, identity = self.config['prior_precision'], torch.eye(self.n_parameters, device=self.device)
         regularized_gradient, regularized_hessian = data_gradient + delta * parameters, data_hessian + delta * identity
         candidate_precision = torch.linalg.eigvalsh(regularized_hessian).max().item() + self.config['curvature_margin']
         raw_signed_curvature = -(regularized_hessian - candidate_precision * identity)
-        raw_eigenvalues = torch.linalg.eigvalsh(raw_signed_curvature)
-        effective_curvature, _, shift = self.make_positive_definite(raw_signed_curvature)
+        effective_curvature = self.make_positive_definite(raw_signed_curvature)
         step = self.clip_step(self.config['cbo_learning_rate'] * -torch.linalg.solve(effective_curvature, regularized_gradient))
-        return {'step': step, 'gradient': regularized_gradient, 'curvature': effective_curvature,
-                'candidate_precision': candidate_precision,
-                'raw_condition_valid': bool(raw_eigenvalues.min().item() > self.config['minimum_eigenvalue']),
-                'matrix_shift': shift, 'objective': objective.item(),
-                'raw_min_eigenvalue': raw_eigenvalues.min().item(),
-                'raw_max_eigenvalue': raw_eigenvalues.max().item()}
+        return step
 
     def run_cbo_method(self, method_name, warm_start, data):
-        parameters, records = warm_start.detach().clone(), []
-        for step_index in range(self.config['n_update_steps']):
-            result = self.cbo_updates[method_name](parameters, data)
-            step, new_parameters = result['step'], parameters + result['step']
-            local_change = self.local_surrogate_change(result['gradient'], result['curvature'], step)
-            records.append({'Method': method_name, 'Step': step_index, 'Objective': result['objective'],
-                            'Step norm': torch.linalg.norm(step).item(), 'Gradient norm': torch.linalg.norm(result['gradient']).item(),
-                            'Posterior mean std': np.nan, 'Posterior max std': np.nan,
-                            'Candidate precision': result['candidate_precision'],
-                            'Raw curvature valid': result['raw_condition_valid'], 'Matrix shift': result['matrix_shift'],
-                            'Raw minimum eigenvalue': result['raw_min_eigenvalue'], 'Raw maximum eigenvalue': result['raw_max_eigenvalue'],
-                            'Local surrogate change': local_change, 'Local surrogate improved': local_change < 0,
-                            'Contaminated train loss': self.regularized_loss(new_parameters, data).item(),
-                            'Clean train loss': self.clean_training_loss(new_parameters, data).item()})
-            parameters = new_parameters
-        return {'parameters': parameters, 'posterior_std': None, 'records': pd.DataFrame(records)}
+        parameters = warm_start.detach().clone()
+        for _ in range(self.config['n_update_steps']):
+            step = self.cbo_updates[method_name](parameters, data)
+            parameters = parameters + step
+        return parameters
 
     def run_bbb_adam(self, warm_start, data):
         """Mean-field Gaussian VI with reparameterized Adam updates."""
         mean = warm_start.detach().clone().requires_grad_(True)
         rho = torch.full_like(mean, self.inverse_softplus(self.config['vi_initial_std']).item(), requires_grad=True)
-        optimizer, records = torch.optim.Adam([mean, rho], lr=self.config['bbb_learning_rate']), []
-        for step_index in range(self.config['n_update_steps']):
-            old_mean = mean.detach().clone()
+        optimizer = torch.optim.Adam([mean, rho], lr=self.config['bbb_learning_rate'])
+        for _ in range(self.config['n_update_steps']):
             optimizer.zero_grad()
             objective = self.negative_elbo(mean, rho, data)
             objective.backward()
-            gradient_norm = torch.sqrt(sum(parameter.grad.square().sum() for parameter in [mean, rho])).item()
             optimizer.step()
-            std, step = (torch.nn.functional.softplus(rho) + 1e-8).detach(), mean.detach() - old_mean
-            records.append({'Method': 'BBB-Adam', 'Step': step_index, 'Objective': objective.item(),
-                            'Step norm': torch.linalg.norm(step).item(), 'Gradient norm': gradient_norm,
-                            'Posterior mean std': std.mean().item(), 'Posterior max std': std.max().item(),
-                            'Candidate precision': float((1.0 / std.square()).mean().item()),
-                            'Raw curvature valid': np.nan, 'Matrix shift': np.nan,
-                            'Raw minimum eigenvalue': np.nan, 'Raw maximum eigenvalue': np.nan,
-                            'Local surrogate change': np.nan, 'Local surrogate improved': np.nan,
-                            'Contaminated train loss': self.regularized_loss(mean.detach(), data).item(),
-                            'Clean train loss': self.clean_training_loss(mean.detach(), data).item()})
-        return {'parameters': mean.detach().clone(), 'posterior_std': std, 'records': pd.DataFrame(records)}
+        return mean.detach().clone()
 
     def diagonal_empirical_fisher(self, parameters, data):
         """Average squared per-example gradients for the diagonal Fisher estimate."""
@@ -276,11 +234,11 @@ class ContaminationExperiment:
 
     def run_vogn(self, warm_start, data):
         """Diagonal VOGN-style update."""
-        mean, curvature, records = warm_start.detach().clone(), torch.ones_like(warm_start), []
+        mean, curvature = warm_start.detach().clone(), torch.ones_like(warm_start)
         n, delta, beta = len(data['y_train']), self.config['prior_precision'], self.config['vogn_beta']
         generator = torch.Generator(device=self.device)
         generator.manual_seed(self.seed + 123)
-        for step_index in range(self.config['n_update_steps']):
+        for _ in range(self.config['n_update_steps']):
             posterior_precision = n * curvature + delta
             posterior_std = torch.rsqrt(torch.clamp(posterior_precision, min=1e-8))
             epsilon = torch.randn(self.n_parameters, generator=generator, device=self.device)
@@ -293,19 +251,7 @@ class ContaminationExperiment:
             direction = -(gradient.detach() + delta * mean / n) / torch.clamp(natural_denominator, min=1e-8)
             step = self.clip_step(self.config['vogn_learning_rate'] * direction)
             mean = mean + step
-            posterior_precision = n * curvature + delta
-            posterior_std = torch.rsqrt(torch.clamp(posterior_precision, min=1e-8))
-            objective = self.data_loss(mean, data) + self.gaussian_kl_to_prior(mean, posterior_std) / n
-            records.append({'Method': 'VOGN', 'Step': step_index, 'Objective': objective.item(),
-                            'Step norm': torch.linalg.norm(step).item(), 'Gradient norm': torch.linalg.norm(gradient).item(),
-                            'Posterior mean std': posterior_std.mean().item(), 'Posterior max std': posterior_std.max().item(),
-                            'Candidate precision': posterior_precision.mean().item(),
-                            'Raw curvature valid': bool(torch.all(curvature > 0).item()), 'Matrix shift': 0.0,
-                            'Raw minimum eigenvalue': curvature.min().item(), 'Raw maximum eigenvalue': curvature.max().item(),
-                            'Local surrogate change': np.nan, 'Local surrogate improved': np.nan,
-                            'Contaminated train loss': self.regularized_loss(mean, data).item(),
-                            'Clean train loss': self.clean_training_loss(mean, data).item()})
-        return {'parameters': mean.detach().clone(), 'posterior_std': posterior_std.detach().clone(), 'records': pd.DataFrame(records)}
+        return mean.detach().clone()
 
     def run_vadam(self, warm_start, data):
         """Vadam-style noisy Adam with a diagonal Gaussian posterior."""
@@ -314,7 +260,6 @@ class ContaminationExperiment:
         beta1, beta2, eps = self.config['vadam_beta1'], self.config['vadam_beta2'], self.config['vadam_epsilon']
         generator = torch.Generator(device=self.device)
         generator.manual_seed(self.seed + 456)
-        records = []
         for step_index in range(1, self.config['n_update_steps'] + 1):
             corrected_second = second_moment / (1.0 - beta2 ** max(step_index - 1, 1)) if step_index > 1 else second_moment
             posterior_precision = n * (torch.sqrt(torch.clamp(corrected_second, min=0.0)) + delta / n)
@@ -329,66 +274,32 @@ class ContaminationExperiment:
             direction = -corrected_first / (torch.sqrt(corrected_second) + eps)
             step = self.clip_step(self.config['vadam_learning_rate'] * direction)
             mean = mean + step
-            posterior_precision = n * (torch.sqrt(corrected_second) + delta / n)
-            posterior_std = torch.rsqrt(torch.clamp(posterior_precision, min=1e-6))
-            objective = self.data_loss(mean, data) + self.gaussian_kl_to_prior(mean, posterior_std) / n
-            records.append({'Method': 'Vadam', 'Step': step_index - 1, 'Objective': objective.item(),
-                            'Step norm': torch.linalg.norm(step).item(), 'Gradient norm': torch.linalg.norm(gradient).item(),
-                            'Posterior mean std': posterior_std.mean().item(), 'Posterior max std': posterior_std.max().item(),
-                            'Candidate precision': posterior_precision.mean().item(),
-                            'Raw curvature valid': bool(torch.all(corrected_second >= 0).item()), 'Matrix shift': 0.0,
-                            'Raw minimum eigenvalue': corrected_second.min().item(), 'Raw maximum eigenvalue': corrected_second.max().item(),
-                            'Local surrogate change': np.nan, 'Local surrogate improved': np.nan,
-                            'Contaminated train loss': self.regularized_loss(mean, data).item(),
-                            'Clean train loss': self.clean_training_loss(mean, data).item()})
-        return {'parameters': mean.detach().clone(), 'posterior_std': posterior_std.detach().clone(), 'records': pd.DataFrame(records)}
+        return mean.detach().clone()
 
     def run_deterministic_adam(self, warm_start, data):
         """Adam reference without parameter sampling."""
         parameters = warm_start.detach().clone().requires_grad_(True)
-        optimizer, records = torch.optim.Adam([parameters], lr=self.config['deterministic_adam_learning_rate']), []
-        for step_index in range(self.config['n_update_steps']):
-            old_parameters = parameters.detach().clone()
+        optimizer = torch.optim.Adam([parameters], lr=self.config['deterministic_adam_learning_rate'])
+        for _ in range(self.config['n_update_steps']):
             optimizer.zero_grad()
             loss = self.regularized_loss(parameters, data)
             loss.backward()
-            gradient_norm = torch.linalg.norm(parameters.grad).item()
             optimizer.step()
-            step = parameters.detach() - old_parameters
-            records.append({'Method': 'Adam', 'Step': step_index, 'Objective': loss.item(),
-                            'Step norm': torch.linalg.norm(step).item(), 'Gradient norm': gradient_norm,
-                            'Posterior mean std': np.nan, 'Posterior max std': np.nan, 'Candidate precision': np.nan,
-                            'Raw curvature valid': np.nan, 'Matrix shift': np.nan,
-                            'Raw minimum eigenvalue': np.nan, 'Raw maximum eigenvalue': np.nan,
-                            'Local surrogate change': np.nan, 'Local surrogate improved': np.nan,
-                            'Contaminated train loss': self.regularized_loss(parameters, data).item(),
-                            'Clean train loss': self.clean_training_loss(parameters, data).item()})
-        return {'parameters': parameters.detach().clone(), 'posterior_std': None, 'records': pd.DataFrame(records)}
+        return parameters.detach().clone()
 
     def fit_all_methods(self, data, seed):
         initial_parameters = self.initialize_parameters(seed)
         warm_start = self.obtain_warm_start(initial_parameters, data)
         fitted = {name: runner(warm_start, data) for name, runner in self.vi_runners.items()}
         fitted.update({name: self.run_cbo_method(name, warm_start, data) for name in self.cbo_updates})
-        fitted['Adam'], fitted['warm_start'] = self.run_deterministic_adam(warm_start, data), warm_start
+        fitted['Adam'] = self.run_deterministic_adam(warm_start, data)
         return fitted
 
-    def evaluate_method(self, method_name, fitted_method, data):
-        parameters, posterior_std, records = fitted_method['parameters'], fitted_method['posterior_std'], fitted_method['records']
+    def evaluate_method(self, method_name, parameters, data):
         with torch.no_grad():
             errors = self.network_forward(parameters, data['x_test']) - data['y_test']
-        curvature = records['Raw curvature valid'].dropna()
-        improvement = records['Local surrogate improved'].dropna()
-        shifts = records['Matrix shift'].dropna()
         return {'Method': method_name,
-                'Test RMSE': torch.sqrt(torch.mean(errors.square())).item() * data['target_std'],
-                'Test MAE': torch.mean(torch.abs(errors)).item() * data['target_std'],
-                'Test 95th error': torch.quantile(torch.abs(errors), 0.95).item() * data['target_std'],
-                'Posterior mean std': posterior_std.mean().item() if posterior_std is not None else np.nan,
-                'Posterior max std': posterior_std.max().item() if posterior_std is not None else np.nan,
-                'Raw curvature valid (%)': 100 * curvature.astype(float).mean() if len(curvature) else np.nan,
-                'Local surrogate improved (%)': 100 * improvement.astype(float).mean() if len(improvement) else np.nan,
-                'Mean matrix shift': shifts.mean() if len(shifts) else np.nan}
+                'RMSE': torch.sqrt(torch.mean(errors.square())).item() * data['target_std']}
 
     def evaluate_all_methods(self, fitted, data):
         return pd.DataFrame([self.evaluate_method(method, fitted[method], data) for method in self.all_methods])

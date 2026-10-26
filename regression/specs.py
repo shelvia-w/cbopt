@@ -7,15 +7,9 @@ DATASET_NAMES = (
     "Wine Red", "Diabetes",
 )
 METHODS = ("Adam", "BBB-Adam", "VOGN", "Vadam", "Lower CBO", "Upper CBO")
-RMSE_COLUMNS = {"contamination": "Test RMSE", "underrepresentation": "RMSE"}
-METRICS = {
-    "contamination": ("Test RMSE", "Test MAE", "Test 95th error"),
-    "underrepresentation": (
-        "RMSE", "MAE", "95th error", "Maximum error", "High-risk recall",
-        "False-negative rate", "High-risk MAE", "Maximum underprediction",
-        "Mean underprediction", "Asymmetric cost", "Worst-decile MAE",
-    ),
-}
+METRIC_COLUMNS = {"contamination": "RMSE", "underrepresentation": "LT-MAE"}
+METHOD_LABELS = dict(zip(METHODS, ("Adam", "BBB", "VOGN", "Vadam", "lCBOpt", "uCBOpt")))
+DATASET_LABELS = {"Real Estate Valuation": "Real Estate"}
 
 
 def dataset_slug(name):
@@ -55,7 +49,7 @@ def validate_config(config, experiment):
     specific = ({"n_train", "contamination_fraction", "outlier_scale", "deterministic_adam_learning_rate"}
                 if experiment == "contamination" else
                 {"test_fraction", "max_train_samples", "high_risk_quantile", "high_risk_train_keep_fraction",
-                 "underprediction_cost", "overprediction_cost", "adam_learning_rate"})
+                 "adam_learning_rate"})
     missing = (common | specific) - set(params)
     if missing:
         raise ValueError(f"Missing experiment parameters: {sorted(missing)}")
