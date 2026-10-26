@@ -19,12 +19,11 @@ def load_results(path, dataset_name, experiment, repetitions):
         return pd.DataFrame()
     frame = pd.read_csv(path)
     metric = METRIC_COLUMNS[experiment]
-    legacy = {"contamination": "Test RMSE", "underrepresentation": "High-risk MAE"}[experiment]
-    if metric not in frame and legacy in frame:
-        frame = frame.rename(columns={legacy: metric})
-    elif metric in frame and legacy in frame:
-        if not np.array_equal(frame[metric].to_numpy(), frame[legacy].to_numpy(), equal_nan=True):
-            raise ValueError(f"{path} contains conflicting {metric} and {legacy} columns")
+    if experiment == "contamination" and "Test RMSE" in frame:
+        if metric not in frame:
+            frame = frame.rename(columns={"Test RMSE": metric})
+        elif not np.array_equal(frame[metric].to_numpy(), frame["Test RMSE"].to_numpy(), equal_nan=True):
+            raise ValueError(f"{path} contains conflicting RMSE and Test RMSE columns")
     required = {"Dataset", "Repetition", "Method", metric}
     if not required.issubset(frame.columns):
         raise ValueError(f"{path} is missing columns: {sorted(required - set(frame.columns))}")
@@ -51,51 +50,6 @@ def completed_repetitions(frame):
         return set()
     counts = frame.groupby("Repetition")["Method"].nunique()
     return set(counts[counts == len(METHODS)].index.astype(int))
-
-
-def _latex_table(means, stds, ranks, config):
-    experiment = config["experiment"]
-    repetitions = config["parameters"]["n_repetitions"]
-    if experiment == "contamination":
-        percent = 100 * config["parameters"]["contamination_fraction"]
-        description = rf"Test RMSE under {percent:g}\% targeted label contamination"
-        label = "full_hessian_contamination"
-    else:
-        description = "Large-target MAE under under-representation of extreme cases"
-        label = "full_hessian_underrep"
-    lines = [
-        r"\begin{table}[t]",
-        r"    \centering",
-        rf"    \caption{{{description} (averaged over {repetitions} runs). "
-        r"Mean ranks are computed across all runs and datasets.}",
-        rf"    \label{{tab:{label}}}",
-        r"    \resizebox{\linewidth}{!}{%",
-        r"    \begin{tabular}{lcccccc}",
-        r"        \toprule",
-        "        Dataset & " + " & ".join(METHOD_LABELS.values()) + r" \\",
-        r"        \midrule",
-    ]
-    for dataset in config["datasets"]:
-        cells = [DATASET_LABELS.get(dataset, dataset)]
-        best = means.loc[dataset].min()
-        for method in METHODS:
-            mean, std = means.loc[dataset, method], stds.loc[dataset, method]
-            value = rf"\mathbf{{{mean:.2f}}}" if mean == best else f"{mean:.2f}"
-            cells.append(rf"${value}_{{\pm {std:.2f}}}$")
-        lines.append("        " + " & ".join(cells) + r" \\")
-    rank_cells = [r"Mean Rank $\downarrow$"]
-    for method in METHODS:
-        rank = ranks.loc[method]
-        rank_cells.append(rf"\textbf{{{rank:.2f}}}" if rank == ranks.min() else f"{rank:.2f}")
-    lines.extend([
-        r"        \midrule",
-        "        " + " & ".join(rank_cells) + r" \\",
-        r"        \bottomrule",
-        r"    \end{tabular}%",
-        r"    }",
-        r"\end{table}",
-    ])
-    return "\n".join(lines) + "\n"
 
 
 def write_reports(results, config):
@@ -127,9 +81,6 @@ def write_reports(results, config):
     output = Path(config["output_dir"])
     output.mkdir(parents=True, exist_ok=True)
     write_csv(table, output / "table.csv", index=True)
-    temporary = output / "table.tex.tmp"
-    temporary.write_text(_latex_table(means, stds, ranks, config), encoding="utf-8")
-    temporary.replace(output / "table.tex")
     return table
 
 
@@ -148,5 +99,5 @@ def summarize_directory(config):
         raise ValueError("Cannot produce a complete table:\n" + "\n".join(incomplete))
     results = pd.concat(frames, ignore_index=True)
     write_reports(results, config)
-    print(f"Wrote {output / 'table.csv'} and {output / 'table.tex'}")
+    print(f"Wrote {output / 'table.csv'}")
     return results

@@ -1,6 +1,6 @@
 # CBOpt
 
-Official code for **Maxitive Donsker-Varadhan Formulation for Possibilistic Variational Inference**, accepted at NeurIPS 2026.
+Official code for [**Maxitive Donsker-Varadhan Formulation for Possibilistic Variational Inference**](https://arxiv.org/abs/2511.21223), accepted at NeurIPS 2026.
 
 ## Installation
 
@@ -125,12 +125,12 @@ Data is cached in `data/regression/`, complete repetitions are saved atomically
 under `outputs/regression/<experiment>/`. Runs resume automatically when the
 config, source, and package versions match, otherwise use a new output directory.
 Each `<dataset>_all_runs.csv` stores the reported metric for every method/run.
-`table.csv` and `table.tex` contain dataset means ± sample standard deviations
+`table.csv` contains dataset means ± sample standard deviations
 (`ddof=1`) and a Mean Rank row, formatted to two decimals. Methods are ranked
 within each dataset/run using unrounded RMSE (contamination) or LT-MAE
 (under-representation), with average ranks for ties. Mean ranks average all 200
-dataset/run pairs. LaTeX bolds the lowest unrounded mean in each row. Tables
-require all configured datasets and repetitions to be complete.
+dataset/run pairs. Tables require all configured datasets and repetitions to be
+complete.
 
 To summarize existing per-dataset CSVs without fitting models or downloading data:
 
@@ -138,8 +138,3 @@ To summarize existing per-dataset CSVs without fitting models or downloading dat
 python scripts/run_contamination.py --summary-only --output-dir contamination_targeted30_results
 python scripts/run_underrepresentation.py --summary-only --output-dir ten_dataset_underrepresentation_results
 ```
-
-Existing CSV columns `Test RMSE` and `High-risk MAE` are also accepted for RMSE
-and LT-MAE respectively. LaTeX tables use `booktabs` and `graphicx`.
-
-Use any script's `--help` for its options.
