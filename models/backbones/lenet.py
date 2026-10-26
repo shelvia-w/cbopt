@@ -1,12 +1,10 @@
-"""LeNet-style convolutional classifier for small grayscale images."""
-
 import torch
 from torch import nn
-from torch.nn import functional as nnf  # used by _AlwaysDrop
+from torch.nn import functional as nnf
 
 
 class _AlwaysDrop(nn.Module):
-    """Dropout active at both train and eval time (MC Dropout)."""
+    """Dropout active during training and evaluation."""
 
     def __init__(self, p: float) -> None:
         super().__init__()

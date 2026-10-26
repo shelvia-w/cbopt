@@ -1,5 +1,3 @@
-"""Filter Response Normalization layers and related building blocks."""
-
 import torch
 from torch import Tensor, nn
 from torch.nn.utils import parametrize
@@ -8,7 +6,7 @@ class FilterResponseNorm(nn.Module):
     def __init__(self, num_filters, eps=1e-6):
         super(FilterResponseNorm, self).__init__()
         self.eps = eps
-        par_shape = (1, num_filters, 1, 1)  # [1,C,1,1]
+        par_shape = (1, num_filters, 1, 1)
         self.tau = torch.nn.Parameter(torch.zeros(par_shape))
         self.beta = torch.nn.Parameter(torch.zeros(par_shape))
         self.gamma = torch.nn.Parameter(torch.ones(par_shape))
@@ -20,9 +18,6 @@ class FilterResponseNorm(nn.Module):
         z = torch.max(y, self.tau)
         return z
 
-# ===================================================================
-# for SNGP
-# ===================================================================
 
 class BoundedScale(nn.Module):
     def __init__(self, bound: float = 1.0):

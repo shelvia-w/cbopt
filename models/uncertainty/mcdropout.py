@@ -1,11 +1,10 @@
-"""Monte Carlo dropout layers and helpers."""
-
 from torch import nn, Tensor
 import torch.nn.functional as nnf
 
 
-# MC dropout module
 class MCDropout(nn.Module):
+    """Dropout active during training and evaluation."""
+
     def __init__(self, p: float = 0.5):
         super().__init__()
         self.p = p

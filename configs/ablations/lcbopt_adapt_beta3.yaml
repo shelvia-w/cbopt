@@ -1,0 +1,3 @@
+base_config: "../fmnist_lenet/lcbopt_adapt.yaml"
+parameter: "method_hparams.beta3"
+values: [0.9,0.99,0.999,0.9999,0.99999]

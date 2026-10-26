@@ -1,0 +1,31 @@
+experiment: "cifar100_densenet121/ucbopt"
+dataset: "cifar100"
+model: "densenet121"
+method: "ucbopt"
+epochs: 200
+batch_size: 128
+eval_batch_size: 256
+train_val_split: 0.9
+learning_rate: 0.1
+lr_final: 0
+weight_decay: 0.0002
+warmup_epochs: 5
+seeds: [0,1,2]
+device: "cuda"
+workers: 1
+eval_workers: 0
+data_dir: "data"
+output_dir: "outputs/cifar100_densenet121/ucbopt"
+evaluation:
+  indomain: true
+  ood: true
+  ood_dataset: "tinyimagenet"
+  checkpoints: ["best","final"]
+  ivon_mean: true
+method_hparams:
+  beta1: 0.9
+  beta2: 0.99999
+  hess_init: 0.05
+  cand_curvature: 0.00005
+  eps: 1e-8
+  rescale_lr: false

@@ -5,3 +5,6 @@ outputs/
 *.csv
 __pycache__/
 .ipynb_checkpoints/
+.tools/
+.venv/
+.local/

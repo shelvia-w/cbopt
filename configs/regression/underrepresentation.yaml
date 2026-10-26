@@ -1,0 +1,38 @@
+experiment: "underrepresentation"
+seed: 42
+device: "auto"
+datasets: ["Concrete", "Airfoil", "Real Estate Valuation", "Power Plant", "Energy Heating", "Auto MPG", "Automobile", "Computer Hardware", "Wine Red", "Diabetes"]
+data_dir: "data/regression"
+output_dir: "outputs/regression/underrepresentation"
+parameters:
+  n_pca_components: 5
+  hidden_size: 2
+  test_fraction: 0.4
+  max_train_samples: 80
+  warmup_steps: 20
+  warmup_learning_rate: 0.015
+  n_update_steps: 60
+  cbo_learning_rate: 0.3
+  trust_radius: 0.12
+  prior_precision: 0.02
+  vi_initial_std: 0.08
+  vi_mc_samples: 16
+  bbb_learning_rate: 0.008
+  vogn_learning_rate: 0.02
+  vogn_beta: 0.99
+  vadam_learning_rate: 0.008
+  vadam_beta1: 0.9
+  vadam_beta2: 0.999
+  vadam_epsilon: 1e-08
+  adam_learning_rate: 0.008
+  curvature_margin: 0.05
+  upper_precision_floor: 0.0001
+  minimum_eigenvalue: 0.0001
+  matrix_damping: 0.0001
+  high_risk_quantile: 0.8
+  high_risk_train_keep_fraction: 0.2
+  underprediction_cost: 4.0
+  overprediction_cost: 1.0
+  n_repetitions: 20
+  n_bootstrap: 5000
+  bootstrap_alpha: 0.05

@@ -1,5 +1,3 @@
-"""Coroutine helpers."""
-
 import csv
 import os
 from datetime import datetime
@@ -7,12 +5,8 @@ from datetime import datetime
 import numpy as np
 
 
-# =============================
-# Coroutine setup
-# =============================
-
 def autoinitcoroutine(coro):
-    """Wrap a coroutine so it is automatically primed."""
+    """Prime a coroutine before returning it."""
     def initcoro(*args, **kwargs):
         cr = coro(*args, **kwargs)
         next(cr)
@@ -21,12 +15,8 @@ def autoinitcoroutine(coro):
     return initcoro
 
 
-# =============================
-# Timing
-# =============================
-
 def coro_timer():
-    """Yield the current time, then successive time deltas."""
+    """Yield the initial timestamp, then (timestamp, elapsed) pairs."""
     now = datetime.now()
     yield now
     while True:
@@ -34,18 +24,13 @@ def coro_timer():
         yield (now, now - past)
 
 
-# =============================
-# Running averages
-# =============================
-
 def _div0(a, b):
-    """Return a / b, or 0.0 when b is zero."""
     return 0.0 if b == 0 else a / b
 
 
 @autoinitcoroutine
 def coro_trackavg_weighted():
-    """Track and yield the running weighted average."""
+    """Yield sum(values) / sum(weights) as pairs arrive."""
     total, totalweights = 0.0, 0.0
     try:
         val, weight = yield
@@ -56,13 +41,8 @@ def coro_trackavg_weighted():
         return _div0(total, totalweights)
 
 
-# =============================
-# CSV logging
-# =============================
-
 @autoinitcoroutine
 def coro_dict2csv(to, fieldnames, append: bool = False, **kwargs):
-    """Write streamed dictionaries to a CSV file."""
     with open(to, "a+" if append else "w", buffering=1) as fp:
         writer = csv.DictWriter(fp, fieldnames=fieldnames, **kwargs)
         if not append:
@@ -73,10 +53,6 @@ def coro_dict2csv(to, fieldnames, append: bool = False, **kwargs):
             d = yield
 
 
-# =============================
-# NumPy batch saving
-# =============================
-
 @autoinitcoroutine
 def coro_npybatchgatherer(
     filepath,
@@ -85,7 +61,7 @@ def coro_npybatchgatherer(
     overwrites=False,
     dtype="float",
 ):
-    """Stream batches into a memory-mapped `.npy` file."""
+    """Write incoming batches to a memory-mapped NumPy array."""
     if (not overwrites) and os.path.exists(filepath):
         raise FileExistsError(f"{filepath} already exists.")
     array = np.empty((entrycount, *entryshape), dtype)

@@ -1,16 +1,12 @@
-"""Backbone model definitions for 32x32 image inputs such as CIFAR."""
-
-# models for 3x32x32 image inputs, e.g., CIFAR-10 / CIFAR-100
 from typing import Tuple
 import torch
 import torch.nn as nn
-from . import resnet_frn
 from . import densenet_frn
 from .frn import FilterResponseNorm, FilterResponseNormLipschitz
 
 
-# cf. https://github.com/pytorch/pytorch/issues/3867#issuecomment-349279036
-# should replicate tensorflow "SAME" padding behavior
+# TensorFlow SAME padding:
+# https://github.com/pytorch/pytorch/issues/3867#issuecomment-349279036
 def conv_same_padding(
     in_size: int, kernel: int, stride: int = 1, dilation: int = 1
 ) -> Tuple[int, int]:
@@ -40,9 +36,9 @@ class ResnetBlock(nn.Module):
         use_bias=True,
     ):
         super(ResnetBlock, self).__init__()
-        # input size = C, H, W
+
         p0, p1 = conv_same_padding(input_size[2], kernel_size, strides)
-        # height padding
+
         p2, p3 = conv_same_padding(input_size[1], kernel_size, strides)
         self.pad1 = torch.nn.ZeroPad2d((p0, p1, p2, p3))
         self.conv1 = torch.nn.Conv2d(
@@ -81,8 +77,8 @@ class StackedResnetBlock(nn.Module):
         self.stack = stack
         self.res_block = res_block
         spatial_out = input_size // (2**stack)
-        if stack > 0 and res_block == 0:  # first layer but not first stack
-            strides = 2  # downsample
+        if stack > 0 and res_block == 0:
+            strides = 2
         else:
             strides = 1
         spatial_in = spatial_out * strides
@@ -101,8 +97,8 @@ class StackedResnetBlock(nn.Module):
             input_size=(num_filters, spatial_out, spatial_out),
             use_bias=use_bias,
         )
-        if stack > 0 and res_block == 0:  # first layer but not first stack
-            # linear projection residual shortcut to match changed dims
+        if stack > 0 and res_block == 0:
+
             self.res3 = ResnetBlock(
                 normalization_layer=normalization_layer,
                 num_filters=num_filters,
@@ -144,7 +140,6 @@ class MakeResnetFn(nn.Module):
         if (depth - 2) % 6 != 0:
             raise ValueError("depth must be 6n+2 (e.g. 20, 32, 44).")
 
-        # first res_layer
         self.layer1 = ResnetBlock(
             normalization_layer=normalization_layer,
             num_filters=width,
@@ -154,17 +149,16 @@ class MakeResnetFn(nn.Module):
             activation=torch.nn.Identity,
             use_bias=True,
         )
-        # stacks
+
         self.stacks = self._make_res_block()
-        # avg pooling
+
         self.avgpool1 = nn.AdaptiveAvgPool2d((1, 1))
-        # torch.nn.AvgPool2d(kernel_size=(8, 8), stride=8, padding=0)
-        # linear layer
+
         self.linear1 = nn.Linear(4 * width, num_classes)
 
     def forward(self, x):
-        # first res_layer
-        out = self.layer1(x)  # shape out torch.Size([5, 16, 32, 32])
+
+        out = self.layer1(x)
         out = self.stacks(out)
         out = self.avgpool1(out)
         out = torch.flatten(out, start_dim=1)
@@ -197,7 +191,6 @@ class MakeResnetFn(nn.Module):
 def make_resnet20_frn_fn(data_info, activation=torch.nn.Identity, norm_layer=FilterResponseNorm):
     num_classes = data_info["num_classes"]
     input_size = data_info.get("input_size", 32)
-    print(activation)
     return MakeResnetFn(
         num_classes,
         depth=20,
@@ -219,9 +212,9 @@ class PreResnetBlock(nn.Module):
         use_bias=True,
     ):
         super().__init__()
-        # input size = C, H, W
+
         p0, p1 = conv_same_padding(input_size[2], kernel_size, strides)
-        # height padding
+
         p2, p3 = conv_same_padding(input_size[1], kernel_size, strides)
         self.pad1 = torch.nn.ZeroPad2d((p0, p1, p2, p3))
         self.conv1 = torch.nn.Conv2d(
@@ -260,13 +253,13 @@ class StackedPreResnetBlock(nn.Module):
         self.stack = stack
         self.res_block = res_block
         spatial_out = input_size // (2**stack)
-        if stack > 0 and res_block == 0:  # first layer but not first stack
-            strides = 2  # downsample
+        if stack > 0 and res_block == 0:
+            strides = 2
         else:
             strides = 1
         spatial_in = spatial_out * strides
-        if stack > 0 and res_block == 0:  # first layer but not first stack
-            # linear projection residual shortcut to match changed dims
+        if stack > 0 and res_block == 0:
+
             self.norm = normalization_layer(input_num_filters)
             self.activation = activation()
             self.res1 = PreResnetBlock(
@@ -336,7 +329,6 @@ class MakePreResnetFn(nn.Module):
         if (depth - 2) % 6 != 0:
             raise ValueError("depth must be 6n+2 (e.g. 20, 32, 44).")
 
-        # first res_layer
         self.layer1 = PreResnetBlock(
             normalization_layer=torch.nn.Identity,
             num_filters=width,
@@ -348,21 +340,19 @@ class MakePreResnetFn(nn.Module):
         )
         self.norm1 = normalization_layer(width)
         self.activation1 = activation()
-        # stacks
+
         self.stacks = self._make_res_block()
-        # last norm + activaiton
+
         self.norm2 = normalization_layer(width * 4)
         self.activation2 = activation()
-        # avg pooling
+
         self.avgpool1 = nn.AdaptiveAvgPool2d((1, 1))
-        # self.avgpool1 = torch.nn.AvgPool2d(
-        #    kernel_size=(8, 8), stride=8, padding=0)
-        # linear layer
+
         self.linear1 = nn.Linear(width * 4, num_classes)
 
     def forward(self, x):
-        # first res_layer
-        out = self.layer1(x)  # shape out torch.Size([5, 16, 32, 32])
+
+        out = self.layer1(x)
         out = self.norm1(out)
         out = self.activation1(out)
         out = self.stacks(out)
@@ -457,7 +447,6 @@ def make_densenet101(data_info, _=None):
     return rn
 
 
-# pytorch version
 def get_model(model_name, data_info, **kwargs):
     _MODEL_FNS = {
         "resnet20_frn": make_resnet20_frn_fn,

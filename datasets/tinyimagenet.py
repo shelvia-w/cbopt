@@ -1,5 +1,3 @@
-"""Tiny ImageNet dataset preparation and loading utilities."""
-
 from typing import Optional, Callable
 from os import rename, rmdir
 from os.path import join as opjoin, exists as opexists
@@ -21,7 +19,7 @@ class TinyImageNet(ImageFolder):
         target_transform: Optional[Callable] = None,
         download: bool = False,
     ):
-        # using val split for evaluation
+        # Evaluate on the labeled validation split.
         split = "train" if train else "val"
         if download:
             self._download(root)
@@ -57,4 +55,3 @@ class TinyImageNet(ImageFolder):
             if opexists(opjoin(val_img_dir, img)):
                 rename(opjoin(val_img_dir, img), opjoin(newpath, img))
         rmdir(val_img_dir)
-

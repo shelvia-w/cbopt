@@ -1,5 +1,3 @@
-"""Checkpoint save/load helpers."""
-
 import inspect
 import warnings
 from importlib import import_module
@@ -13,12 +11,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 import models as _models
 
 
-# =============================
-# Class/function resolution
-# =============================
-
 def _resolve_qualified_attr(module_name: str, qualname: str):
-    """Resolve a qualified attribute from an importable module."""
     obj = import_module(module_name)
     for part in qualname.split("."):
         obj = getattr(obj, part)
@@ -26,7 +19,6 @@ def _resolve_qualified_attr(module_name: str, qualname: str):
 
 
 def _filter_constructor_kwargs(cls, kwargs: Mapping[str, Any]) -> dict[str, Any]:
-    """Keep only kwargs accepted by the class constructor unless it already accepts `**kwargs`."""
     signature = inspect.signature(cls.__init__)
     if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
         return dict(kwargs)
@@ -41,7 +33,6 @@ def _filter_constructor_kwargs(cls, kwargs: Mapping[str, Any]) -> dict[str, Any]
 
 
 def _resolve_optimizer_class(checkpoint: Mapping[str, Any]):
-    """Resolve the optimizer class from checkpoint metadata, with name-based fallback for older checkpoints."""
     module_name = checkpoint.get("optimmodule")
     qualname = checkpoint.get("optimqualname")
     if module_name and qualname:
@@ -56,10 +47,6 @@ def _resolve_optimizer_class(checkpoint: Mapping[str, Any]):
     )
 
 
-# =============================
-# Checkpoint saving & loading
-# =============================
-
 def savecheckpoint(
     to,
     modelname: str,
@@ -70,7 +57,6 @@ def savecheckpoint(
     scheduler,
     **kwargs,
 ) -> None:
-    """Save a model checkpoint with optimizer and scheduler state."""
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning)
         _models.savemodel(
@@ -85,6 +71,11 @@ def savecheckpoint(
                 "optimqualname": type(optimizer).__qualname__,
                 "optimargs": optimizer.defaults,
                 "optimstates": optimizer.state_dict(),
+                "optimattributes": {
+                    key: getattr(optimizer, key)
+                    for key in ("current_step", "mc_samples", "hess_approx", "rescale_lr", "debias")
+                    if hasattr(optimizer, key)
+                },
                 "schedulername": type(scheduler).__name__ if scheduler is not None else None,
                 "schedulerstates": scheduler.state_dict() if scheduler is not None else None,
             },
@@ -92,13 +83,16 @@ def savecheckpoint(
         )
 
 
-def loadcheckpoint(fromfile, device=torch.device("cpu"), epochs=200):
-    """Load a checkpoint and rebuild model, optimizer, and scheduler."""
+def loadcheckpoint(fromfile, device=torch.device("cpu"), epochs=200, restore_scheduler=True):
     model, dic = _models.loadmodel(fromfile, device)
     optimargs = dict(dic.pop("optimargs"))
     optimizer_cls = _resolve_optimizer_class(dic)
     optimizer = optimizer_cls(model.parameters(), **_filter_constructor_kwargs(optimizer_cls, optimargs))
     optimizer.load_state_dict(dic.pop("optimstates"))
+    for key, value in dic.pop("optimattributes", {}).items():
+        setattr(optimizer, key, value)
+    if not restore_scheduler:
+        return dic.get("epoch", -1) + 1, model, optimizer, None, dic
     schedulername = dic.get("schedulername")
     if schedulername in (None, "NoneType"):
         dic.pop("schedulerstates", None)

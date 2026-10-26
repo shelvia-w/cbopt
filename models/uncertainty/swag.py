@@ -1,7 +1,5 @@
-"""SWAG uncertainty model implementation and sampling utilities."""
-
 # Modified from https://github.com/izmailovpavel/understandingbdl
-# which is by Pavel Izmailov released under BSD 2-Clause License
+# Pavel Izmailov; BSD 2-Clause License.
 import copy
 import torch
 from torch import nn, Tensor, LongTensor
@@ -13,6 +11,8 @@ def flatten_params_to_cpu(model: nn.Module) -> Tensor:
 
 
 class SWAG(torch.nn.Module):
+    """SWAG posterior with a diagonal plus low-rank covariance."""
+
     def __init__(self, basemodel: nn.Module, max_rank: int = 20):
         assert max_rank >= 0
         super(SWAG, self).__init__()
@@ -25,7 +25,7 @@ class SWAG(torch.nn.Module):
         )
         self.num_layers = self.count_layers()
         self.num_channels = self.count_channels()
-        # 1st and 2nd moments
+
         self.mean: Tensor
         self.sq_mean: Tensor
         self.n_models: LongTensor
@@ -33,12 +33,11 @@ class SWAG(torch.nn.Module):
         self.register_buffer("mean", torch.zeros(self.num_parameters))
         self.register_buffer("sq_mean", torch.zeros(self.num_parameters))
         self.register_buffer("n_models", torch.zeros((), dtype=torch.long))
-        # deviations for computing low rank approx of cov mat
+
         self.register_buffer(
             "deviations", torch.empty((0, self.num_parameters))
         )
 
-    # count layers with params
     def count_layers(self) -> int:
         count = 0
         for m in self.basemodel.modules():
@@ -46,7 +45,6 @@ class SWAG(torch.nn.Module):
                 count += 1
         return count
 
-    # count total channels
     def count_channels(self) -> int:
         count = 0
         for m in self.basemodel.modules():
@@ -77,7 +75,7 @@ class SWAG(torch.nn.Module):
         assert step > 0
         if rank > 0:
             self.deviations = self.deviations[-rank * step + (step - 1) : step]
-        elif rank == 0:  # SWAG diagonal case
+        elif rank == 0:
             self.deviations = torch.empty((0, self.num_parameters))
         else:
             raise ValueError(f"rank must be non-negative, received {rank}")
@@ -88,7 +86,7 @@ class SWAG(torch.nn.Module):
             *args, **kwargs
         )[:3]
         self.basedevice = device
-        # buffers stay on cpu
+        # Keep posterior statistics on CPU when moving the backbone.
         for b in self.buffers(recurse=False):
             b.to(dtype=dtype, non_blocking=non_blocking)
         return self
@@ -105,13 +103,13 @@ class SWAG(torch.nn.Module):
             base_model = self.basemodel
         n_models = self.n_models.item()
         w = flatten_params_to_cpu(base_model)
-        # update 1st and 2nd moments
+
         self.mean.mul_(n_models / (n_models + 1.0))
         self.mean.add_(w / (n_models + 1.0))
         self.sq_mean.mul_(n_models / (n_models + 1.0))
         self.sq_mean.add_(w**2 / (n_models + 1.0))
         self.n_models.add_(1)
-        # update deviations
+
         dev = w - self.mean
         if self.rank + 1 > self.max_rank:
             self.deviations = self.deviations[1:, :]
@@ -133,14 +131,12 @@ class SWAG(torch.nn.Module):
             offset += pnumel
         return model
 
-    # apply swa weight to base model
     def averaged_model(self, model=None) -> nn.Module:
-        # return base model with averaged weight
+
         return self._model_with_weights(self.mean, model)
 
     sample_mode = ("modelwise", "layerwise", "channelwise")
 
-    # sample weight for base model
     def sampled_model(self, model=None, mode="modelwise") -> nn.Module:
         if mode == "modelwise":
             return self._sampled_model_modelwise(model)
@@ -166,7 +162,7 @@ class SWAG(torch.nn.Module):
             sample = sample + z2 @ dev / ((2.0 * (rank - 1)) ** 0.5)
         else:
             sample = mean + torch.sqrt(var) * torch.randn_like(var)
-        # return base model with sampled weight
+
         return self._model_with_weights(sample, model)
 
     @torch.no_grad()
@@ -194,7 +190,6 @@ class SWAG(torch.nn.Module):
             layerpos += 1
         return model
 
-    # sample weight for base model, layerwise decomposition
     def _sampled_model_layerwise(self, model=None) -> nn.Module:
         var = self.variance
         if self.rank > 1:
@@ -233,7 +228,6 @@ class SWAG(torch.nn.Module):
             coffset += c
         return model
 
-    # sample weight for base model, channelwise decomposition
     def _sampled_model_channelwise(self, model=None) -> nn.Module:
         var = self.variance
         if self.rank > 1:
@@ -245,7 +239,7 @@ class SWAG(torch.nn.Module):
             sample = self.mean + torch.sqrt(var) * torch.randn_like(var)
             return self._model_with_weights(sample, model)
 
-    # adapt size of self.deviations before loading
+    # Resize the low-rank buffer to match the checkpoint.
     def _load_from_state_dict(
         self,
         state_dict,

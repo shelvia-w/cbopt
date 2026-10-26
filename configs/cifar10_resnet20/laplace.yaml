@@ -1,15 +1,34 @@
-dataset: cifar10
-model: resnet20
-method: laplace
+experiment: "cifar10_resnet20/laplace"
+dataset: "cifar10"
+model: "resnet20"
+method: "laplace"
 epochs: 200
 batch_size: 128
 eval_batch_size: 256
+train_val_split: 0.9
 learning_rate: 0.1
-lr_final: 0.0
-weight_decay: 2e-4
+lr_final: 0
+weight_decay: 0.0002
 warmup_epochs: 5
-random_seed: 0
-data_dir: data
-output_dir: outputs/cifar10_resnet20/laplace/seed0
-evaluation: {indomain: true, ood: true, ood_dataset: svhn}
-method_hparams: {momentum: 0.9, subset_of_weights: last_layer, hessian_structure: kron, pred_type: glm, link_approx: probit, prior_precision: 9.0}
+seeds: [0,1,2]
+device: "cuda"
+workers: 1
+eval_workers: 0
+data_dir: "data"
+output_dir: "outputs/cifar10_resnet20/laplace"
+evaluation:
+  indomain: true
+  ood: true
+  ood_dataset: "svhn"
+  checkpoints: ["best","final"]
+  ivon_mean: true
+method_hparams:
+  momentum: 0.9
+  subset_of_weights: "last_layer"
+  hessian_structure: "kron"
+  pred_type: "glm"
+  link_approx: "probit"
+  n_samples: 100
+  prior_precision: 9
+  optimize_prior_precision: true
+  prior_precision_method: "marglik"

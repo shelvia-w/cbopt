@@ -1,5 +1,3 @@
-"""Implementation of uCBOpt."""
-
 from __future__ import annotations
 
 from typing import Callable, Optional
@@ -10,6 +8,7 @@ from torch import Tensor
 ClosureType = Callable[[], Tensor]
 
 class uCBOpt(torch.optim.Optimizer):
+    """Upper-CBO with fixed candidate curvature (Algorithm 1)."""
 
     def __init__(
         self,

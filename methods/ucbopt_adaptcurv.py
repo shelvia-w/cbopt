@@ -1,5 +1,3 @@
-"""Implementation of uCBOpt-adapt."""
-
 from __future__ import annotations
 
 import math
@@ -12,31 +10,18 @@ ClosureType = Callable[[], Tensor]
 
 
 class uCBOptAdaptCurv(torch.optim.Optimizer):
-    """Upper-CBO optimizer with growing running maximum curvature tracking.
+    """Upper-CBO with a growing minimum curvature envelope (Algorithm 2).
 
-    State per parameter tensor:
-        step           -- update count
-        exp_avg        -- EMA of gradients (m_t)
-        exp_avg_sq     -- EMA of squared gradients (h_t), init to hess_init
-        min_exp_avg_sq -- growing running minimum of exp_avg_sq (c_t), init to +inf
-
-    Update rules:
-        h_t      = beta2 * h_{t-1} + (1 - beta2) * g_t^2     
-        m_t      = beta1 * m_{t-1} + (1 - beta1) * g_t        
-        c_t      = min(beta3 * c_{t-1}, h_curv_t)             
-        denom    = h_curv_t - gamma * c_t
-        numer    = m_t + weight_decay * param
-        lr_eff   = lr * (hess_init + weight_decay)  if rescale_lr else lr
-        param   -= lr_eff * numer / denom
-
-    Require: beta 3 > 1 and gamma in [0,1).
+    For h_t = EMA(g_t**2), track c_t = min(beta3 * c_{t-1}, h_t + wd).
+    The update denominator is h_t + wd - gamma * c_t + eps. Only the
+    first moment is bias-corrected. Requires beta3 > 1 and 0 <= gamma < 1.
     """
 
     def __init__(
         self,
         params,
         lr: float = 0.01,
-        betas: tuple[float, float, float] = (0.9, 0.999, 1.001),
+        betas: tuple[float, float, float] = (0.9, 0.99999, 1.001),
         weight_decay: float = 1e-4,
         hess_init: float = 0.5,
         gamma: float = 0.1,
@@ -118,7 +103,7 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
                     state["step"] = 0
                     state["exp_avg"] = torch.zeros_like(p)
                     state["exp_avg_sq"] = torch.full_like(p, float(hess_init))
-                    # decayed running minimum of exp_avg_sq; tracks adaptive curvature
+
                     state["min_exp_avg_sq"] = torch.full_like(p, float("inf"))
 
                 state["step"] += 1
@@ -130,36 +115,30 @@ class uCBOptAdaptCurv(torch.optim.Optimizer):
             if not params_with_grad:
                 continue
 
-            # h_t = beta2 * h_{t-1} + (1 - beta2) * g_t^2
             grad_sq = torch._foreach_mul(grads, grads)
             torch._foreach_mul_(exp_avg_sqs, beta2)
             torch._foreach_add_(exp_avg_sqs, grad_sq, alpha=1.0 - beta2)
 
-            # m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
             torch._foreach_mul_(exp_avgs, beta1)
             torch._foreach_add_(exp_avgs, grads, alpha=1.0 - beta1)
 
-            # h_curv_t = h_t + weight_decay
             h_curv = torch._foreach_add(exp_avg_sqs, wd)
 
-            # c_t = min(beta3 * c_{t-1}, h_curv_t)  — growing running minimum
             torch._foreach_mul_(min_exp_avg_sqs, beta3)
             for c, hc in zip(min_exp_avg_sqs, h_curv):
                 torch.minimum(c, hc, out=c)
 
-            # bias-correct m only; h is not bias-corrected
             bc_m = [1.0 - beta1 ** t for t in step_counts]
             m_hat = torch._foreach_div(exp_avgs, bc_m)
 
-            # denom = h_curv_t - gamma * c_t
             denom = torch._foreach_add(h_curv, min_exp_avg_sqs, alpha=-gamma)
+            torch._foreach_add_(denom, eps)
             torch._foreach_clamp_min_(denom, eps)
 
             numer = torch._foreach_add(m_hat, params_with_grad, alpha=wd)
 
             update = torch._foreach_div(numer, denom)
 
-            # optional elementwise clipping of the update
             if math.isfinite(clip_radius):
                 torch._foreach_clamp_(update, -clip_radius, clip_radius)
 

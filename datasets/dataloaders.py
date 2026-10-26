@@ -1,5 +1,3 @@
-"""Dataset loader factories for the reproducible experiments."""
-
 from os.path import join as pjoin
 from typing import Tuple
 import random

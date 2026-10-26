@@ -1,17 +1,11 @@
-"""Calibration helpers."""
-
 from typing import Iterable, Tuple, List, Optional
 from .coroutines import autoinitcoroutine
 
 
 BINSTYPE = Tuple[List[int], List[int], List[float]]
 
-# =============================
-# Aggregate metrics from bins
-# =============================
 
 def bins2ece(bins: BINSTYPE) -> float:
-    """Compute ECE from binned predictions."""
     num = sum(bins[0])
     ece = 0.0
     for corr, cconf in zip(bins[1], bins[2]):
@@ -20,24 +14,15 @@ def bins2ece(bins: BINSTYPE) -> float:
 
 
 def bins2acc(bins: BINSTYPE) -> float:
-    """Compute overall accuracy from binned predictions."""
     return float(sum(bins[1])) / sum(bins[0])
 
 
 def bins2conf(bins: BINSTYPE) -> float:
-    """Compute average confidence from binned predictions."""
     return sum(bins[2]) / sum(bins[0])
 
 
-# =============================
-# Bin construction and merging
-# =============================
-
 def data2bins(rightconfs: Iterable[Tuple[bool, float]], nbin: int = 10) -> BINSTYPE:
-    """
-    Bin (correctness, confidence) pairs by confidence level.
-    Returns per-bin counts, correct predictions, and confidence sums.
-    """
+    """Return per-bin sample counts, correct counts, and confidence sums."""
     bincounts = [0] * nbin
     corrects = [0] * nbin
     cumconf = [0.0] * nbin
@@ -53,7 +38,6 @@ def data2bins(rightconfs: Iterable[Tuple[bool, float]], nbin: int = 10) -> BINST
 
 @autoinitcoroutine
 def coro_binsmerger():
-    """Coroutine that incrementally merges bin statistics."""
     bins = None
     try:
         bins = yield
@@ -65,7 +49,6 @@ def coro_binsmerger():
 
 
 def joinbins(*binses):
-    """Merge multiple bin summaries into one."""
     lb = len(binses[0][0])
     for bins in binses:
         if len(bins[0]) != lb:
@@ -78,16 +61,11 @@ def joinbins(*binses):
     )
 
 
-# =============================
-# Reliability diagram
-# =============================
-
 def bins2diagram(
     bins: BINSTYPE,
     displays: bool = False,
     saveas: Optional[str] = None
 ) -> None:
-    """Plot and optionally save a reliability diagram from binned predictions."""
     import matplotlib
 
     matplotlib.use("pdf")

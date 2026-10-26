@@ -1,15 +1,31 @@
-dataset: fmnist
-model: lenet
-method: ucbopt
+experiment: "fmnist_lenet/ucbopt"
+dataset: "fmnist"
+model: "lenet"
+method: "ucbopt"
 epochs: 100
 batch_size: 128
 eval_batch_size: 256
-learning_rate: 1e-2
-lr_final: 0.0
-weight_decay: 2e-3
+train_val_split: 0.9
+learning_rate: 0.01
+lr_final: 0
+weight_decay: 0.002
 warmup_epochs: 5
-random_seed: 0
-data_dir: data
-output_dir: outputs/fmnist_lenet/ucbopt/seed0
-evaluation: {indomain: true, ood: true, ood_dataset: emnist}
-method_hparams: {beta1: 0.9, beta2: 0.99999, hess_init: 0.05, cand_curvature: 8e-6, rescale_lr: false}
+seeds: [0,1,2]
+device: "cuda"
+workers: 1
+eval_workers: 0
+data_dir: "data"
+output_dir: "outputs/fmnist_lenet/ucbopt"
+evaluation:
+  indomain: true
+  ood: true
+  ood_dataset: "emnist"
+  checkpoints: ["best","final"]
+  ivon_mean: true
+method_hparams:
+  beta1: 0.9
+  beta2: 0.99999
+  hess_init: 0.05
+  cand_curvature: 0.000008
+  eps: 1e-8
+  rescale_lr: false

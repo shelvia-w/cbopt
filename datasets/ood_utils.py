@@ -1,5 +1,3 @@
-"""Out-of-domain dataset loaders and OOD metric helpers."""
-
 from typing import Tuple, Dict
 from os.path import join as pjoin
 import statistics
@@ -209,7 +207,7 @@ class OODMetrics:
     def _fpr_tpr(self) -> Tuple[np.ndarray, np.ndarray]:
         from sklearn.metrics import roc_curve
 
-        return roc_curve(self._is_indomain, self._confidence)[:2]
+        return roc_curve(self._is_indomain, self._confidence, drop_intermediate=False)[:2]
 
     @cached_property
     def auroc(self) -> float:
@@ -231,14 +229,9 @@ class OODMetrics:
 
     @cached_property
     def fpr_at_tpr95(self) -> float:
+        """FPR at the first ROC threshold with in-domain recall >= 0.95."""
         fpr, tpr = self._fpr_tpr
-        eps = self.eps
-        idx_tpr95 = (tpr <= (0.95 + eps)) >= (0.95 - eps)
-        if not np.any(idx_tpr95):
-            raise ValueError(
-                f"no tpr between [{0.95 - eps}, {0.95 + eps}], increase eps!"
-            )
-        return fpr[idx_tpr95].mean()
+        return float(fpr[np.flatnonzero(tpr >= 0.95)[0]])
 
     @cached_property
     def detection_error(self) -> float:

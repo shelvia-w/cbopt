@@ -1,5 +1,3 @@
-"""Core batch execution helpers."""
-
 import collections
 from typing import Any, Callable
 
@@ -11,17 +9,12 @@ from torch.utils.data import DataLoader
 SummaryWriter = None
 
 
-# =============================
-# Batch tensor utilities
-# =============================
-
 def avgdups(t: Tensor, dups: int) -> Tensor:
-    """Average predictions from duplicated copies of the same samples."""
+    """Average repeated copies arranged as (duplicates, batch, ...)."""
     return torch.mean(t.view(dups, -1, *t.size()[1:]), dim=0)
 
 
 def apply_batch(batch, fn: Callable[[Tensor], Any]):
-    """Recursively apply a function to tensors inside a batch."""
     if isinstance(batch, Tensor):
         return fn(batch)
     if isinstance(batch, collections.abc.Mapping):
@@ -31,10 +24,6 @@ def apply_batch(batch, fn: Callable[[Tensor], Any]):
     return batch
 
 
-# =============================
-# Epoch execution
-# =============================
-
 def do_epoch(
     loader: DataLoader,
     compbatch,
@@ -42,7 +31,10 @@ def do_epoch(
     device=torch.device("cpu"),
     **comp_kwargs,
 ):
-    """Run one full pass over a dataloader and stream outputs to a logger coroutine."""
+    """Stream batches to the logger.
+
+    End the epoch with corolog.throw(StopIteration) to obtain its metrics.
+    """
     i = -1
     batchoutput = None
     metrics = None
@@ -56,10 +48,6 @@ def do_epoch(
     return metrics
 
 
-# =============================
-# Batch execution
-# =============================
-
 def do_trainbatch(
     batchinput,
     model,
@@ -67,7 +55,7 @@ def do_trainbatch(
     dups: int = 1,
     repeat: int = 1,
 ):
-    """Run one training batch and return averaged probabilities, labels, and loss."""
+    """Return mean probabilities, labels, and loss after one optimizer step."""
     optimizer.zero_grad(set_to_none=True)
     inputs, gt = batchinput[:-1], batchinput[-1]
     cumloss = 0.0
@@ -92,7 +80,7 @@ def do_evalbatch(
     dups: int = 1,
     repeat: int = 1,
 ):
-    """Run one evaluation batch and return averaged probabilities, labels, and loss."""
+    """Return mean probabilities, labels, and mean loss across repeated passes."""
     inputs, gt = batchinput[:-1], batchinput[-1]
     cumloss = 0.0
     cumprob = torch.zeros([], device=inputs[0].device, dtype=inputs[0].dtype)

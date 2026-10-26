@@ -1,5 +1,3 @@
-"""Model constructors and checkpoint serialization helpers."""
-
 from typing import Any, Iterable, Mapping
 
 import torch
@@ -7,6 +5,7 @@ from torch import nn
 
 from .backbones.frn import FilterResponseNorm
 from .backbones.lenet import LeNet
+from .backbones.densenet_frn import DenseNet121
 from .backbones.models32 import get_model
 from .uncertainty.mcdropout import MCDropout
 from .uncertainty.swag import SWAG
@@ -54,6 +53,18 @@ def densenet101(outclass: int, input_size: int = 32) -> torch.nn.Module:
     return get_model("densenet101", data_info={"num_classes": outclass, "input_size": input_size})
 
 
+def densenet121(outclass: int, input_size: int = 32) -> torch.nn.Module:
+    return DenseNet121(outclass, input_size)
+
+
+def densenet121_mcdrop(outclass: int, input_size: int = 32, p: float = 0.05) -> torch.nn.Module:
+    return DenseNet121(outclass, input_size, dropout_p=p)
+
+
+def densenet121_swag(outclass: int, input_size: int = 32, max_rank: int = 20) -> SWAG:
+    return SWAG(densenet121(outclass, input_size), max_rank)
+
+
 def lenet_mcdrop(outclass: int, input_size: int = 28, p: float = 0.05) -> torch.nn.Module:
     return LeNet(outclass, input_size, dropout_p=p)
 
@@ -89,18 +100,21 @@ STANDARDMODELS = {
     "lenet": lenet,
     "resnet20": resnet20,
     "densenet101": densenet101,
+    "densenet121": densenet121,
 }
 
 MCDROPMODELS = {
     "lenet_mcdrop": lenet_mcdrop,
     "resnet20_mcdrop": resnet20_mcdrop,
     "densenet101_mcdrop": densenet101_mcdrop,
+    "densenet121_mcdrop": densenet121_mcdrop,
 }
 
 SWAGMODELS = {
     "lenet_swag": lenet_swag,
     "resnet20_swag": resnet20_swag,
     "densenet101_swag": densenet101_swag,
+    "densenet121_swag": densenet121_swag,
 }
 
 MODELS = {**STANDARDMODELS, **MCDROPMODELS, **SWAGMODELS}

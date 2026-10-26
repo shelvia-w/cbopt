@@ -1,0 +1,44 @@
+{
+  "main": [
+    "configs/fmnist_lenet/sgd.yaml",
+    "configs/fmnist_lenet/adamw.yaml",
+    "configs/fmnist_lenet/ivon.yaml",
+    "configs/fmnist_lenet/mcdrop.yaml",
+    "configs/fmnist_lenet/laplace.yaml",
+    "configs/fmnist_lenet/swag.yaml",
+    "configs/fmnist_lenet/ucbopt.yaml",
+    "configs/fmnist_lenet/ucbopt_adapt.yaml",
+    "configs/fmnist_lenet/lcbopt_adapt.yaml",
+    "configs/fmnist_lenet/ucbopt_nocurv.yaml",
+    "configs/cifar10_resnet20/sgd.yaml",
+    "configs/cifar10_resnet20/adamw.yaml",
+    "configs/cifar10_resnet20/ivon.yaml",
+    "configs/cifar10_resnet20/mcdrop.yaml",
+    "configs/cifar10_resnet20/laplace.yaml",
+    "configs/cifar10_resnet20/swag.yaml",
+    "configs/cifar10_resnet20/ucbopt.yaml",
+    "configs/cifar10_resnet20/ucbopt_adapt.yaml",
+    "configs/cifar10_resnet20/lcbopt_adapt.yaml",
+    "configs/cifar10_resnet20/ucbopt_nocurv.yaml",
+    "configs/cifar100_densenet121/sgd.yaml",
+    "configs/cifar100_densenet121/ivon.yaml",
+    "configs/cifar100_densenet121/mcdrop.yaml",
+    "configs/cifar100_densenet121/ucbopt.yaml",
+    "configs/cifar100_densenet121/ucbopt_adapt.yaml",
+    "configs/cifar100_densenet121/lcbopt_adapt.yaml",
+    "configs/cifar100_densenet121/ucbopt_nocurv.yaml"
+  ],
+  "combined": [
+    "configs/cbopt_mcdrop/ucbopt.yaml",
+    "configs/cbopt_mcdrop/ucbopt_nocurv.yaml",
+    "configs/cbopt_mcdrop/ucbopt_adapt.yaml",
+    "configs/cbopt_mcdrop/lcbopt_adapt.yaml"
+  ],
+  "ablations": [
+    "configs/ablations/ucbopt_curvature.yaml",
+    "configs/ablations/ucbopt_adapt_gamma.yaml",
+    "configs/ablations/ucbopt_adapt_beta3.yaml",
+    "configs/ablations/lcbopt_adapt_gamma.yaml",
+    "configs/ablations/lcbopt_adapt_beta3.yaml"
+  ]
+}

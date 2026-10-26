@@ -1,14 +1,14 @@
-"""DenseNet in PyTorch."""
 import math
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .frn import FilterResponseNorm
+from ..uncertainty.mcdropout import MCDropout
 
 
 class Bottleneck(nn.Module):
-    def __init__(self, in_planes, growth_rate):
+    def __init__(self, in_planes, growth_rate, dropout_p=0.0):
         super(Bottleneck, self).__init__()
         self.bn1 = FilterResponseNorm(in_planes)
         self.conv1 = nn.Conv2d(
@@ -18,10 +18,12 @@ class Bottleneck(nn.Module):
         self.conv2 = nn.Conv2d(
             4 * growth_rate, growth_rate, kernel_size=3, padding=1, bias=False
         )
+        self.drop1 = MCDropout(dropout_p) if dropout_p else nn.Identity()
+        self.drop2 = MCDropout(dropout_p) if dropout_p else nn.Identity()
 
     def forward(self, x):
-        out = self.conv1(self.bn1(x))
-        out = self.conv2(self.bn2(out))
+        out = self.drop1(self.conv1(self.bn1(x)))
+        out = self.drop2(self.conv2(self.bn2(out)))
         out = torch.cat([out, x], 1)
         return out
 
@@ -47,9 +49,11 @@ class DenseNet(nn.Module):
         reduction=0.5,
         num_classes=10,
         input_size=32,
+        dropout_p=0.0,
     ):
         super(DenseNet, self).__init__()
         self.growth_rate = growth_rate
+        self.dropout_p = dropout_p
 
         num_planes = 2 * growth_rate
         self.conv1 = nn.Conv2d(
@@ -85,7 +89,7 @@ class DenseNet(nn.Module):
     def _make_dense_layers(self, block, in_planes, nblock):
         layers = []
         for i in range(nblock):
-            layers.append(block(in_planes, self.growth_rate))
+            layers.append(block(in_planes, self.growth_rate, self.dropout_p))
             in_planes += self.growth_rate
         return nn.Sequential(*layers)
 
@@ -101,13 +105,14 @@ class DenseNet(nn.Module):
         return out
 
 
-def DenseNet121(num_classes, input_size):
+def DenseNet121(num_classes, input_size, dropout_p=0.0):
     return DenseNet(
         Bottleneck,
         [6, 12, 24, 16],
         growth_rate=12,
         num_classes=num_classes,
         input_size=input_size,
+        dropout_p=dropout_p,
     )
 
 

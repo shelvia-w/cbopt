@@ -1,5 +1,3 @@
-"""Implementation of the IVON optimizer."""
-
 from math import pow
 from typing import Callable, Optional, Tuple
 from contextlib import contextmanager
@@ -81,9 +79,8 @@ class IVON(torch.optim.Optimizer):
         self.debias = debias
         self.rescale_lr = rescale_lr
 
-        # set initial temporary running averages
         self._reset_samples()
-        # init all states
+
         self._init_buffers()
 
     def _get_param_configs(self):
@@ -152,9 +149,9 @@ class IVON(torch.optim.Optimizer):
                     else:
                         param_grads.append(torch.zeros_like(p).flatten())
                 offset += p.numel()
-        assert offset == self._numel  # sanity check
+        assert offset == self._numel
 
-        if train:  # collect grad sample for training
+        if train:
             grad_sample = torch.cat(param_grads, 0)
             count = self.state["count"] + 1
             self.state["count"] = count
@@ -179,7 +176,7 @@ class IVON(torch.optim.Optimizer):
                     loss = closure()
                 losses.append(loss)
             loss = sum(losses) / self.mc_samples
-        if self.sync and dist.is_initialized():  # explicit sync
+        if self.sync and dist.is_initialized():
             self._sync_samples()
         self._update()
         self._reset_samples()
@@ -220,8 +217,8 @@ class IVON(torch.optim.Optimizer):
                 p.data = (p_avg + p_noise).view(p.shape)
                 goffset += numel
                 offset += numel
-            assert goffset == group["numel"]  # sanity check
-        assert offset == self._numel  # sanity check
+            assert goffset == group["numel"]
+        assert offset == self._numel
 
         return torch.cat(param_avgs, 0), torch.cat(noise_samples, 0)
 
@@ -265,7 +262,6 @@ class IVON(torch.optim.Optimizer):
                 group["hess_init"]
             )
 
-            # update params
             pg_offset = 0
             for p in group["params"]:
                 if p is not None:
@@ -273,9 +269,9 @@ class IVON(torch.optim.Optimizer):
                         p.shape
                     )
                     pg_offset += p.numel()
-            assert pg_offset == group["numel"]  # sanity check
+            assert pg_offset == group["numel"]
             offset += group["numel"]
-        assert offset == self._numel  # sanity check
+        assert offset == self._numel
 
     @staticmethod
     def _get_nll_hess(

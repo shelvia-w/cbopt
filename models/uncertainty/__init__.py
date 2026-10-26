@@ -1,5 +1,3 @@
-"""Uncertainty-aware model exports."""
-
 from .mcdropout import MCDropout
 from .swag import SWAG
 

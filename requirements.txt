@@ -1,6 +1,4 @@
-# Python version used in the conda env: 3.11.14
-
-# Core scientific stack
+# Python 3.11
 numpy==1.26.4
 scipy==1.16.3
 scikit-learn==1.8.0
@@ -10,17 +8,14 @@ tqdm==4.67.1
 pandas==3.0.0
 pyyaml==6.0.3
 
-# PyTorch stack
 torch==2.10.0
 torchvision==0.25.0
 torchmetrics==1.9.0
 
-# Bayesian / curvature / optimizer tools
 ivon-opt==0.1.2
 laplace-torch==0.2.2.2
 
-# Experiment logging
 tensorboard==2.20.0
 
-# Datasets / utilities
 einops==0.8.1
+ucimlrepo==0.0.7
