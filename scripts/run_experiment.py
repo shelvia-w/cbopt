@@ -62,6 +62,10 @@ def load_config(path):
     cfg.setdefault("warmup_epochs", 5)
     cfg.setdefault("lr_final", 0.0)
     cfg.setdefault("method_hparams", {})
+    if cfg["method"] == "laplace":
+        cfg["method_hparams"].setdefault("ood_pred_type", "glm")
+        cfg["method_hparams"].setdefault("ood_link_approx", "mc")
+        cfg["method_hparams"].setdefault("ood_n_samples", 64)
     cfg.setdefault("experiment", f"{Path(path).parent.name}/{Path(path).stem}")
     defaults = {"indomain": True, "ood": True, "checkpoints": ["best", "final"], "ivon_mean": True}
     cfg["evaluation"] = {**defaults, **cfg.get("evaluation", {})}
@@ -91,7 +95,7 @@ def validate_config(cfg):
     if ev["ood"] and ev.get("ood_dataset") not in OOD_LOADERS:
         raise ValueError("Set evaluation.ood_dataset to emnist, svhn, or tinyimagenet")
     hp = cfg["method_hparams"]
-    for key in ("test_repeat", "model_samples", "mc_samples", "test_dups", "swag_freq"):
+    for key in ("test_repeat", "model_samples", "mc_samples", "test_dups", "swag_freq", "n_samples", "ood_n_samples"):
         if key in hp and (not isinstance(hp[key], int) or hp[key] < 1):
             raise ValueError(f"{key} must be a positive integer")
     if cfg["method"] == "swag":
@@ -145,7 +149,7 @@ def build_optimizer(cfg, model):
     cls = uCBOptAdaptCurv if method == "ucbopt_adapt" else lCBOptAdaptCurv
     return cls(model.parameters(), betas=(hp.get("beta1", 0.9), hp.get("beta2", 0.99999),
                                          hp.get("beta3", 1.001 if method == "ucbopt_adapt" else 0.999)),
-               gamma=hp.get("gamma", 0.9 if method == "ucbopt_adapt" else 1.05), eps=hp.get("eps", 1e-8),
+               gamma=hp.get("gamma", 0.9 if method == "ucbopt_adapt" else 1.02), eps=hp.get("eps", 1e-8),
                clip_radius=hp.get("clip_radius", float("inf")), **curvature, **common)
 
 
@@ -181,7 +185,7 @@ def enable_mc_dropout(model):
             module.train()
 
 
-def make_predictor(cfg, model, optimizer, device, la=None, prediction="predictive"):
+def make_predictor(cfg, model, optimizer, device, la=None, prediction="predictive", ood=False):
     """Keep SWAG draws fixed across the in-domain and OOD passes."""
     hp = cfg["method_hparams"]
     model.eval()
@@ -198,11 +202,18 @@ def make_predictor(cfg, model, optimizer, device, la=None, prediction="predictiv
     @torch.no_grad()
     def predict(images):
         if la is not None:
-            kwargs = {"pred_type": hp.get("pred_type", "glm")}
+            pred_type = hp.get("pred_type", "glm")
+            link_approx = hp.get("link_approx", "probit")
+            n_samples = hp.get("n_samples", 100)
+            if ood:
+                pred_type = hp.get("ood_pred_type", pred_type)
+                link_approx = hp.get("ood_link_approx", "mc")
+                n_samples = hp.get("ood_n_samples", 64)
+            kwargs = {"pred_type": pred_type}
             if kwargs["pred_type"] == "glm":
-                kwargs["link_approx"] = hp.get("link_approx", "probit")
+                kwargs["link_approx"] = link_approx
             if kwargs["pred_type"] == "nn" or kwargs.get("link_approx") == "mc":
-                kwargs["n_samples"] = hp.get("n_samples", 100)
+                kwargs["n_samples"] = n_samples
             return la(images, **kwargs)
         if isinstance(optimizer, IVON) and prediction != "mean":
             result = None
@@ -319,13 +330,36 @@ def fit_laplace(cfg, model, train_loader, val_loader):
                  hessian_structure=hp.get("hessian_structure", "kron"), prior_precision=hp.get("prior_precision", 1.0))
     la.fit(train_loader)
     if hp.get("optimize_prior_precision", True):
-        la.optimize_prior_precision(method=hp.get("prior_precision_method", "marglik"),
-                                    pred_type=hp.get("pred_type", "glm"), link_approx=hp.get("link_approx", "probit"),
-                                    val_loader=val_loader)
+        pred_type = hp.get("pred_type", "glm")
+        link_approx = hp.get("link_approx", "probit")
+        method = hp.get("prior_precision_method", "marglik")
+        kwargs = {"method": method, "pred_type": pred_type, "val_loader": val_loader}
+        if pred_type == "glm":
+            kwargs["link_approx"] = link_approx
+        if link_approx == "mc" or pred_type == "nn":
+            kwargs["n_samples"] = hp.get("n_samples", 100)
+        if method != "gridsearch" or len(val_loader):
+            la.optimize_prior_precision(**kwargs)
     fitted_hp = dict(hp)
+    fitted_hp["likelihood"] = "classification"
     precision = la.prior_precision
     fitted_hp["prior_precision"] = float(precision.detach().cpu().item()) if torch.is_tensor(precision) else float(precision)
     torch.save({"state_dict": la.state_dict(), "config": fitted_hp}, Path(cfg["output_dir"]) / "laplace_state.pt")
+    return la
+
+
+def load_laplace(model, path, device):
+    """Restore cbo's shared final-epoch posterior alongside the selected MAP model."""
+    from laplace import Laplace
+
+    saved = torch.load(path, map_location=device)
+    hp = saved["config"]
+    model.eval()
+    la = Laplace(model, likelihood=hp.get("likelihood", "classification"),
+                 subset_of_weights=hp.get("subset_of_weights", "last_layer"),
+                 hessian_structure=hp.get("hessian_structure", "kron"),
+                 prior_precision=hp["prior_precision"])
+    la.load_state_dict(saved["state_dict"])
     return la
 
 
@@ -367,13 +401,18 @@ def evaluate(cfg, model, optimizer, test_loader, device, la=None, checkpoint="be
         metadata = {"experiment": cfg["experiment"], "seed": cfg["random_seed"], "method": cfg["method"], "model": cfg["model"],
                     "dataset": cfg["dataset"], "checkpoint": checkpoint, "selected_epoch": selected_epoch,
                     "prediction": mode, "mc_dropout": cfg.get("mc_dropout", False)}
-        if ev["indomain"] or ev["ood"]:
+        if ev["indomain"] or (ev["ood"] and la is None):
             probs, labels = collect_predictions(test_loader, predictor, device)
             np.save(output_dir / f"predictions_indomain{suffix}.npy", probs)
             np.save(output_dir / "labels_indomain.npy", labels)
             if ev["indomain"]:
                 rows.append({**metadata, "split": "indomain", **classification_metrics(probs, labels, cfg.get("bins", 20))})
         if ood_loader is not None:
+            if la is not None:
+                predictor = make_predictor(cfg, model, optimizer, device, la, mode, ood=True)
+                probs, labels = collect_predictions(test_loader, predictor, device)
+                np.save(output_dir / f"predictions_indomain_ood{suffix}.npy", probs)
+                np.save(output_dir / "labels_indomain.npy", labels)
             out_probs, _ = collect_predictions(ood_loader, predictor, device)
             np.save(output_dir / f"predictions_ood{suffix}.npy", out_probs)
             metrics = OODMetrics(probs.max(axis=1), out_probs.max(axis=1)).get_all()
@@ -415,7 +454,16 @@ def run_seed(cfg, evaluate_only=False, overwrite=False):
         name, model = build_model(cfg, device)
         optimizer = build_optimizer(cfg, model)
         train(cfg, name, model, optimizer, build_scheduler(cfg, optimizer), train_loader, val_loader, device)
+        if cfg["method"] == "laplace":
+            # cbo fits once at the final MAP parameters, then shares this state.
+            fit_laplace(cfg, model, train_loader, val_loader)
         del model, optimizer
+    laplace_path = output_dir / "laplace_state.pt"
+    if cfg["method"] == "laplace" and not laplace_path.exists():
+        # Older cbopt runs saved only per-checkpoint posterior states.
+        _, final_model, _, _, _ = loadcheckpoint(output_dir / "checkpoint.pt", device, restore_scheduler=False)
+        fit_laplace(cfg, final_model, train_loader, val_loader)
+        del final_model
     rows = []
     for checkpoint in cfg["evaluation"]["checkpoints"]:
         filename = "best_checkpoint.pt" if checkpoint == "best" else "checkpoint.pt"
@@ -425,7 +473,7 @@ def run_seed(cfg, evaluate_only=False, overwrite=False):
         evaluation_cfg = copy.deepcopy(cfg)
         evaluation_cfg["output_dir"] = str(output_dir / f"eval_{checkpoint}")
         Path(evaluation_cfg["output_dir"]).mkdir(parents=True, exist_ok=True)
-        la = fit_laplace(evaluation_cfg, model, train_loader, val_loader) if cfg["method"] == "laplace" else None
+        la = load_laplace(model, laplace_path, device) if cfg["method"] == "laplace" else None
         rows.extend(evaluate(evaluation_cfg, model, optimizer, test_loader, device, la, checkpoint, metadata.get("epoch")))
         del model, optimizer, la
     write_csv(output_dir / "metrics.csv", rows)

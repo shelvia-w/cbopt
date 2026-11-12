@@ -29,6 +29,9 @@ method_hparams:
   pred_type: "glm"
   link_approx: "probit"
   n_samples: 100
+  ood_pred_type: "glm"
+  ood_link_approx: "mc"
+  ood_n_samples: 64
   prior_precision: 0.54
   optimize_prior_precision: true
   prior_precision_method: "marglik"

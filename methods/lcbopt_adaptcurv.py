@@ -24,7 +24,7 @@ class lCBOptAdaptCurv(torch.optim.Optimizer):
         betas: tuple[float, float, float] = (0.9, 0.99999, 0.999),
         weight_decay: float = 1e-4,
         hess_init: float = 1.0,
-        gamma: float = 1.05,
+        gamma: float = 1.02,
         eps: float = 1e-6,
         maximize: bool = False,
         clip_radius: float = float("inf"),
